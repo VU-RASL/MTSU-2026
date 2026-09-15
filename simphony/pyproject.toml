@@ -1,0 +1,42 @@
+[project]
+name = "sim_dev"
+version = "0.1.0"
+description = "Add your description here"
+readme = "README.md"
+authors = [
+    { name = "Alexandra Watkins", email = "xandra.watkins@gmail.com" }
+]
+requires-python = ">=3.13"
+dependencies = [
+    "fastapi>=0.115.12",
+    "httpx>=0.28.1",
+    "langchain>=0.3.23",
+    "langchain-community>=0.3.21",
+    "langchain-openai>=0.3.12",
+    "loguru>=0.7.3",
+    "openai>=1.70.0",
+    "pydantic>=2.11.2",
+    "python-dotenv>=1.1.0",
+    "simphony-addin",
+    "simphony-core",
+    "tinydb>=4.8.2",
+    "uvicorn>=0.34.0",
+]
+
+[project.scripts]
+app = "sim_dev.app:main"
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.uv.workspace]
+members = ["packages/*"]
+
+[tool.uv.sources]
+simphony-core = { workspace = true }
+simphony-addin = { workspace = true }
+
+# [tool.hatch.build.targets]
+# sources = ["src"]
+# only-include = ["src/simphony/dev"]

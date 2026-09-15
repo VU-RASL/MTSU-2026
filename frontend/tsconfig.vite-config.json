@@ -1,0 +1,12 @@
+{
+  "extends":
+    "@tsconfig/node23/tsconfig.json",
+    // "@vue/tsconfig/tsconfig.json"
+  // ],
+  "include": ["vite.config.*"],
+  "compilerOptions": {
+    "composite": true,
+    "allowJs": true,
+    "types": ["node"]
+  }
+}
