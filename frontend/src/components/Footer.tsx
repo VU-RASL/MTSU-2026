@@ -2,7 +2,7 @@ import React from 'react'
 
 const Footer: React.FC = () => {
   return (
-    <footer>
+    <footer className="footer">
       <p>© 2024 My App</p>
     </footer>
   )

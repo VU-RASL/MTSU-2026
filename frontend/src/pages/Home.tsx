@@ -16,9 +16,13 @@ const Home: React.FC = () => {
     return (
         <>
         <Header />
-        <div>
-            <h1>Home</h1>
-            <button onClick={personaButton}>Create Persona</button>
+        <div className="content">
+            <div className="home-content">
+                <h1>Welcome to Project Vera</h1>
+                <p>Our misson is to create a digital environment for medical professionals to practice and create scenarios for autism diagnosis and treatment.</p>
+                <button onClick={personaButton}>Create Persona</button>
+
+            </div>
         </div>
         <Footer />
         </>
