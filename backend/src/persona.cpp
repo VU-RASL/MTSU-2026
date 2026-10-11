@@ -14,7 +14,6 @@
 // --------------------------
 // Instead of writing ~30 lines like
 //     out["identity"]["name"] = p.name;
-//     out["identity"]["age"]  = p.age;
 //     ...
 // in toJson(), and ~30 matching lines in applyJson(), we list every field
 // ONCE in a table (kStringFields and kListFields below). Each row says:
@@ -64,6 +63,9 @@ using ListMember = std::vector<std::string> Persona::*;
 // Each row: { where it lives in the JSON, which struct field it is }.
 // To add a field: add it to the struct in persona.h, then add one row here.
 // -----------------------------------------------------------------------------
+
+// UPDATE TO HOW AGE IS HANDLED - FROM STRING FIELD TO INT/NUMBER FIELD
+// AGE NOW IS HANDLED IN toJson and applyJson!
 
 // Fields that hold a single string.
 const std::vector<std::pair<Path, StringMember>> kStringFields = {
@@ -215,7 +217,7 @@ bool applyJson(const crow::json::rvalue& body, Persona& p, std::string& error) {
         }
         p.*member = std::string(value->s());   // copy the string into the struct
     }
-
+    // age value is integer which needs its own way to convert to JSON
     const auto* ageValue = find(body, {"identity", "age"});
     if (ageValue) {
         if (ageValue->t() != crow::json::type::Number) {
@@ -224,6 +226,7 @@ bool applyJson(const crow::json::rvalue& body, Persona& p, std::string& error) {
         }
         p.age = static_cast<int>(ageValue->i());
     }
+
     // List fields
     for (const auto& [path, member] : kListFields) {
         const auto* value = find(body, path);  // look for this field in the JSON
