@@ -74,7 +74,6 @@ const std::vector<std::pair<Path, StringMember>> kStringFields = {
 
     // Identity section
     {{"identity", "name"},                     &Persona::name},
-    {{"identity", "age"},                      &Persona::age},
     {{"identity", "ethnicity"},                &Persona::ethnicity},
     {{"identity", "sex"},                      &Persona::sex},
     {{"identity", "gender"},                   &Persona::gender},
@@ -172,6 +171,8 @@ crow::json::wvalue toJson(const Persona& p) {
     out["id"] = p.id;               // server-managed fields go at the top level
     out["createdAt"] = p.createdAt;
 
+    out["identity"]["age"] = p.age;  // age is managed here since all other fields are managed above as strings
+
     // Single-value fields: copy each one into its spot.
     // [path, member] unpacks each table row into its two parts.
     for (const auto& [path, member] : kStringFields) {
@@ -215,6 +216,14 @@ bool applyJson(const crow::json::rvalue& body, Persona& p, std::string& error) {
         p.*member = std::string(value->s());   // copy the string into the struct
     }
 
+    const auto* ageValue = find(body, {"identity", "age"});
+    if (ageValue) {
+        if (ageValue->t() != crow::json::type::Number) {
+            error = "'identity.age' must be an integer";
+            return false;
+        }
+        p.age = static_cast<int>(ageValue->i());
+    }
     // List fields
     for (const auto& [path, member] : kListFields) {
         const auto* value = find(body, path);  // look for this field in the JSON
