@@ -77,7 +77,7 @@ struct Persona {
 
     // --- Identity section ---
     std::string name;               // persona's full name
-    std::string age;                // a string so "5 months" or "late 30s" work too
+    int age = -1;                // only accepts integers as age like 39. -1 indicates no user input yet
     std::string ethnicity;
     std::string sex;
     std::string gender;

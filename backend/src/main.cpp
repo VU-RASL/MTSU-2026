@@ -95,7 +95,7 @@ void seed(PersonaStore& store) {
 
     // Identity
     p.name = "Gloria Nellie No Braids";
-    p.age = "39";
+    p.age = 39;
     p.ethnicity = "Navajo";
     p.sex = "Female";
     p.gender = "Female";
