@@ -1,0 +1,18 @@
+# Exclude host dependencies; npm installs Linux dependencies in the container.
+node_modules/
+# Exclude generated frontend build output.
+dist/
+# Exclude generated server-side rendering build output.
+dist-ssr/
+# Exclude Git metadata from the build context.
+.git/
+# Exclude local environment files from the image.
+.env
+# Exclude environment files with suffixes, such as .env.local.
+.env.*
+# Exclude other local-only configuration files.
+*.local
+# Exclude generated logs.
+*.log
+# Exclude macOS Finder metadata.
+.DS_Store

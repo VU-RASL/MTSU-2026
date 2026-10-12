@@ -4,4 +4,10 @@ import { defineConfig } from 'vite'
 // https://vite.dev/config/
 export default defineConfig({
   plugins: [react()],
+  server: {
+    proxy: {
+      // Compose uses the backend service name; local development uses localhost.
+      '/api': process.env.API_PROXY_TARGET || 'http://localhost:18080',
+    },
+  },
 })

@@ -1,0 +1,14 @@
+# Exclude host build files; the container compiles into /build instead.
+build/
+# Exclude the build directory used by the local backend instructions.
+build-server/
+# Exclude an optional local Boost download; this image uses standalone Asio.
+crow/boost_1_92_0/
+# Exclude Git metadata from the build context.
+.git/
+# Exclude local environment files from the image.
+.env
+# Exclude environment files with suffixes, such as .env.local.
+.env.*
+# Exclude macOS Finder metadata.
+.DS_Store
