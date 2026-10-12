@@ -14,7 +14,6 @@
 // --------------------------
 // Instead of writing ~30 lines like
 //     out["identity"]["name"] = p.name;
-//     out["identity"]["age"]  = p.age;
 //     ...
 // in toJson(), and ~30 matching lines in applyJson(), we list every field
 // ONCE in a table (kStringFields and kListFields below). Each row says:
@@ -65,6 +64,9 @@ using ListMember = std::vector<std::string> Persona::*;
 // To add a field: add it to the struct in persona.h, then add one row here.
 // -----------------------------------------------------------------------------
 
+// UPDATE TO HOW AGE IS HANDLED - FROM STRING FIELD TO INT/NUMBER FIELD
+// AGE NOW IS HANDLED IN toJson and applyJson!
+
 // Fields that hold a single string.
 const std::vector<std::pair<Path, StringMember>> kStringFields = {
     // Top of page (not nested)
@@ -74,7 +76,6 @@ const std::vector<std::pair<Path, StringMember>> kStringFields = {
 
     // Identity section
     {{"identity", "name"},                     &Persona::name},
-    {{"identity", "age"},                      &Persona::age},
     {{"identity", "ethnicity"},                &Persona::ethnicity},
     {{"identity", "sex"},                      &Persona::sex},
     {{"identity", "gender"},                   &Persona::gender},
@@ -172,6 +173,8 @@ crow::json::wvalue toJson(const Persona& p) {
     out["id"] = p.id;               // server-managed fields go at the top level
     out["createdAt"] = p.createdAt;
 
+    out["identity"]["age"] = p.age;  // age is managed here since all other fields are managed above as strings
+
     // Single-value fields: copy each one into its spot.
     // [path, member] unpacks each table row into its two parts.
     for (const auto& [path, member] : kStringFields) {
@@ -213,6 +216,15 @@ bool applyJson(const crow::json::rvalue& body, Persona& p, std::string& error) {
             return false;
         }
         p.*member = std::string(value->s());   // copy the string into the struct
+    }
+    // age value is integer which needs its own way to convert to JSON
+    const auto* ageValue = find(body, {"identity", "age"});
+    if (ageValue) {
+        if (ageValue->t() != crow::json::type::Number) {
+            error = "'identity.age' must be an integer";
+            return false;
+        }
+        p.age = static_cast<int>(ageValue->i());
     }
 
     // List fields

@@ -103,7 +103,7 @@ The JSON is nested to match the sections on the persona page:
   "summary": "...",
   "color": "#F4C542",
   "metadata":     { "contentWarnings": [] },
-  "identity":     { "name": "", "age": "", "ethnicity": "", "sex": "", "gender": "", "sexualOrientation": "" },
+  "identity":     { "name": "", "age": -1, "ethnicity": "", "sex": "", "gender": "", "sexualOrientation": "" },
   "presentation": { "affect": "", "speech": "", "misc": "" },
   "health": {
     "chiefComplaint": "",
@@ -118,6 +118,7 @@ The JSON is nested to match the sections on the persona page:
   "emotionalWellbeing": [], "socialDeterminantsOfHealth": [], "promptsAndSpecialInstructions": []
 }
 ```
+## AGE = -1 MEANS AGE HAS NOT BEEN SET YET 
 
 Errors come back as `{"error": "message"}` with a 400 (bad input) or 404 (persona not found).
 
