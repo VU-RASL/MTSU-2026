@@ -28,9 +28,11 @@
 // p.name or p.chiefComplaint.
 //
 // In JSON, the same fields are grouped by the sections on the page:
-//   { "identity": { "name": "Gloria", "age": "39" },
+//   { "identity": { "name": "Gloria", "age": 39 },
 //     "health":   { "diagnosis": { "actual": "..." } } }
-//
+// ---------UPDATE TO AGE ------------
+// UPDATE TO HOW AGE IS HANDLED - FROM STRING FIELD TO INT/NUMBER FIELD
+// 
 // The field tables at the top of persona.cpp record where each C++ field
 // lives in the JSON. That table is the ONLY place the two layouts are
 // connected.
@@ -77,7 +79,7 @@ struct Persona {
 
     // --- Identity section ---
     std::string name;               // persona's full name
-    std::string age;                // a string so "5 months" or "late 30s" work too
+    int age = -1;                // only accepts integers as age like 39. -1 indicates no user input yet
     std::string ethnicity;
     std::string sex;
     std::string gender;
