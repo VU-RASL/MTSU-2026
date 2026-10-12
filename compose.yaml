@@ -1,0 +1,87 @@
+# Environment variables and customizable development settings.
+# Edit the defaults after :- here, or set these variables in a root .env file.
+# & names a reusable YAML value; * uses that value in the services below.
+x-environment:
+  # Browser-facing port on your computer; Vite still listens on 5173 inside Docker.
+  FRONTEND_PORT: &frontend-port "${FRONTEND_PORT:-5173}"
+  # Direct API port on your computer; the backend still listens on 18080 inside Docker.
+  BACKEND_PORT: &backend-port "${BACKEND_PORT:-18080}"
+  # Address Vite uses inside Docker; host port changes do not change this address.
+  API_PROXY_TARGET: &api-proxy-target "${API_PROXY_TARGET:-http://backend:18080}"
+
+# Applications that Compose runs together.
+services:
+  # Service name; other containers can reach it as "backend".
+  backend:
+    # Build an image using backend/Dockerfile.
+    build: ./backend
+    # Add a small init process to forward signals and reap child processes.
+    init: true
+    # Environment variables passed to the backend container.
+    environment:
+      # Tell the C++ server which container port to listen on.
+      PORT: "18080"
+    # Publish container ports on your computer.
+    ports:
+      # Map the customizable host port to the fixed internal API port.
+      - target: 18080
+        # Reuse BACKEND_PORT from the settings section.
+        published: *backend-port
+        # Allow connections only from your own computer.
+        host_ip: "127.0.0.1"
+    # Make host source and Docker-managed storage available inside the container.
+    volumes:
+      # Mount backend source at /app, read-only from the container.
+      - ./backend:/app:ro
+      # Store Linux CMake build files in a reusable named volume.
+      - backend_build:/build
+    # Check whether the API is ready to accept requests.
+    healthcheck:
+      # Run curl inside the backend; HTTP errors fail the check.
+      test: ["CMD", "curl", "--fail", "--silent", "http://localhost:18080/api/health"]
+      # Run the check every five seconds after the startup period.
+      interval: 5s
+      # Fail a check if it takes longer than three seconds.
+      timeout: 3s
+      # Mark unhealthy after five consecutive failed checks.
+      retries: 5
+      # Allow initial compilation time before counting check failures.
+      start_period: 120s
+
+  # Vite development server for the React app.
+  frontend:
+    # Build an image using frontend/Dockerfile.
+    build: ./frontend
+    # Forward signals and clean up child processes.
+    init: true
+    # Environment variables passed to the frontend container.
+    environment:
+      # Vite sends /api requests to the backend service.
+      API_PROXY_TARGET: *api-proxy-target
+    # Publish Vite's port on your computer.
+    ports:
+      # Map the customizable browser port to Vite's fixed internal port.
+      - target: 5173
+        # Reuse FRONTEND_PORT from the settings section.
+        published: *frontend-port
+        # Allow connections only from your own computer.
+        host_ip: "127.0.0.1"
+    # Mount source and a separate dependency directory.
+    volumes:
+      # Mount frontend source at /app; edit it on your computer.
+      - ./frontend:/app:ro
+      # Writable Linux dependencies, separate from host node_modules.
+      - frontend_node_modules:/app/node_modules
+    # Control startup order.
+    depends_on:
+      # Wait for this service when starting the frontend.
+      backend:
+        # Start frontend only after the backend health check passes.
+        condition: service_healthy
+
+# Declare named volumes managed by Docker; they survive container removal.
+volumes:
+  # Persistent CMake cache, object files, and server executable.
+  backend_build:
+  # Persistent directory for npm-installed dependencies.
+  frontend_node_modules:
