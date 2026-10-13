@@ -6,9 +6,11 @@ set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
 add_subdirectory(crow/Crow-1.3.5)
 
+find_package(CURL REQUIRED)
+
 add_executable(server 
     src/main.cpp
     src/persona.cpp
     src/persona_store.cpp
     )
-target_link_libraries(server PRIVATE Crow::Crow)
+target_link_libraries(server PRIVATE Crow::Crow CURL::libcurl)

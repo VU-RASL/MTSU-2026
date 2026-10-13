@@ -1,6 +1,9 @@
 #include <cstdlib>
 #include <string>
 #include <vector>
+#include <curl/curl.h>
+#include <iostream>
+#include <stdexcept>
 
 #include "crow.h"
 #include "crow/middlewares/cors.h"
@@ -8,6 +11,59 @@
 #include "persona_store.h"
 
 namespace {
+
+size_t receiveBody(char* data, size_t size, size_t count, void* output) {
+    const size_t bytes = size * count;
+    static_cast<std::string*>(output)->append(data, bytes);
+    return bytes;
+}
+
+void checkSupabase() {
+    const char* baseUrl = std::getenv("SUPABASE_URL");
+    const char* secretKey = std::getenv("SUPABASE_SECRET_KEY");
+
+    if (!baseUrl || !*baseUrl || !secretKey || !*secretKey) {
+        throw std::runtime_error("Missing Supabase environment variables");
+    }
+
+    CURL* curl = curl_easy_init();
+    if (!curl) {
+        throw std::runtime_error("Could not initialize HTTP client");
+    }
+
+    std::string url = std::string(baseUrl) + "/rest/v1/personas?select=id&limit=1";
+    std::string keyHeader = std::string("apikey: ") + secretKey;
+    std::string body;
+
+    curl_slist* headers = nullptr;
+    headers = curl_slist_append(headers, keyHeader.c_str());
+    headers = curl_slist_append(headers, "Accept: application/json");
+
+    curl_easy_setopt(curl, CURLOPT_URL, url.c_str());
+    curl_easy_setopt(curl, CURLOPT_HTTPHEADER, headers);
+    curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, receiveBody);
+    curl_easy_setopt(curl, CURLOPT_WRITEDATA, &body);
+    curl_easy_setopt(curl, CURLOPT_CONNECTTIMEOUT, 5L);
+    curl_easy_setopt(curl, CURLOPT_TIMEOUT, 15L);
+
+    const CURLcode result = curl_easy_perform(curl);
+
+    long status = 0;
+    curl_easy_getinfo(curl, CURLINFO_RESPONSE_CODE, &status);
+
+    curl_slist_free_all(headers);
+    curl_easy_cleanup(curl);
+
+    if (result != CURLE_OK) {
+        throw std::runtime_error(curl_easy_strerror(result));
+    }
+
+    if (status != 200) {
+        throw std::runtime_error("Supabase connection check returned HTTP " + std::to_string(status));
+    }
+
+    std::cout << "Supabase connection successful\n";
+}
 
 crow::response jsonError(int status, const std::string& message) {
     crow::json::wvalue body;
@@ -39,6 +95,20 @@ void seed(PersonaStore& store) {
 }  // namespace
 
 int main() {
+
+    if (curl_global_init(CURL_GLOBAL_DEFAULT) != CURLE_OK) {
+        std::cerr << "Could not initialize libcurl\n";
+        return 1;
+    }
+
+    try {
+        checkSupabase();
+    } catch (const std::exception& error) {
+        std::cerr << error.what() << '\n';
+        curl_global_cleanup();
+        return 1;
+    }
+    
     // CORSHandler lets the React dev server (a different port = a different
     // "origin") call this API. Without it the browser blocks the requests.
     crow::App<crow::CORSHandler> app;
@@ -119,4 +189,6 @@ int main() {
     const int port = portEnv ? std::atoi(portEnv) : 18080;
 
     app.port(port).multithreaded().run();
+
+    curl_global_cleanup();
 }
