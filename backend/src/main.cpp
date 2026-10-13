@@ -134,46 +134,6 @@ crow::response jsonError(int status, const std::string& message) {
     return crow::response(status, body);
 }
 
-// -----------------------------------------------------------------------------
-// seed
-// Adds one sample persona at startup so the page isn't empty while testing.
-// Fields not set here stay blank (empty strings and empty lists).
-//
-// NOTE: This goes away when we switch to Supabase. The sample persona will
-// become a row in the database instead of being typed into the code.
-// -----------------------------------------------------------------------------
-void seed(PersonaStore& store) {
-    Persona p;  // starts with every field empty
-
-    // Top of page
-    p.title = "Pediatric MMR Vaccination and Anaphylaxis Response";
-    p.summary = "A grandmother who is hesitant about vaccinating her 5 year old grandson.";
-    p.color = "#F4C542";
-
-    // Identity
-    p.name = "Gloria Nellie No Braids";
-    p.age = 39;
-    p.ethnicity = "Navajo";
-    p.sex = "Female";
-    p.gender = "Female";
-
-    // Presentation
-    p.affect = "Hesitant, nervous, and questioning";
-    p.speech = "typical";
-
-    // Health
-    p.chiefComplaint = "child coming for MMR vaccine for upcoming school year";
-
-    // Lists: {"a", "b"} creates a list with those items
-    p.goals = {"achieve vaccinations"};
-    p.challenges = {"unfamiliarity and distrust with western medicine"};
-    p.thoughtsAndFeelings = {"hesitant", "questions"};
-    p.tasksAndActivities = {"administration of MMR vaccine"};
-    p.socialDeterminantsOfHealth = {"Lives with grandmother", "no food or housing insecurities"};
-
-    store.create(p);  // the store assigns id 1 and today's date
-}
-
 }  // namespace
 
 int main() {
@@ -206,6 +166,18 @@ int main() {
 
     crow::App<crow::CORSHandler> app;
 
+    app.exception_handler([](crow::response& response) {
+        try {
+            throw;
+        } catch (const std::exception& error) {
+            std::cerr << "Request failed: " << error.what() << '\n';
+        } catch (...) {
+            std::cerr << "Request failed: unknown error\n";
+        }
+
+        response = jsonError(500, "Unable to complete the request. Please try again.");
+    });
+
     // Grab the CORS add-on so we can configure it.
     auto& cors = app.get_middleware<crow::CORSHandler>();
     cors.global()                              // these rules apply to every route
@@ -217,7 +189,6 @@ int main() {
     // 2. Create the store and add the sample persona
     // -------------------------------------------------------------------------
     PersonaStore store;
-    seed(store);
 
     // -------------------------------------------------------------------------
     // GET /api/health
@@ -305,7 +276,10 @@ int main() {
         std::string error;
         if (!applyJson(body, updated, error)) return jsonError(400, error);  // apply only the sent fields
 
-        store.update(updated);                    // save the new version
+        if (!store.update(updated)) {
+            return jsonError(404, "Persona not found");
+        }
+
         return crow::response(200, toJson(updated));
     });
 

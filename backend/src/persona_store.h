@@ -32,8 +32,7 @@
 
 #pragma once  // only include this file once per .cpp, even if #included twice
 
-#include <map>       // std::map, holds the personas
-#include <mutex>     // std::mutex, the lock described above
+// liew;/ changed includes to match new architecture. No map, mutex, or counter is needed
 #include <optional>  // std::optional, for "a persona, or nothing"
 #include <string>
 #include <vector>
@@ -41,6 +40,9 @@
 
 class PersonaStore {
 public:
+
+    // default constructor def
+    PersonaStore();
     // -------------------------------------------------------------------------
     // list
     // Returns all personas, sorted by id.
@@ -81,11 +83,14 @@ public:
     bool remove(int id);
 
 private:
-    // `mutable` lets the lock be used inside const methods (list and get).
-    // Those methods don't change any personas, but locking still changes the
-    // mutex's own state, so the compiler needs this permission.
-    mutable std::mutex mutex_;
+    // liew;/ wiped this section and rewrote. baseUrl and secretKey correspond to 
+    // Supabase keys, the request function is making a request to the server.
+    std::string baseUrl_;
+    std::string secretKey_;
 
-    std::map<int, Persona> personas_;  // id -> persona; std::map keeps keys sorted, so ids stay in order
-    int nextId_ = 1;                   // the id the next new persona will get; goes up by 1 each time
+    std::string request(
+        const std::string& method,
+        const std::string& path,
+        const std::string& body = ""
+    ) const;
 };
