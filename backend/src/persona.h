@@ -49,7 +49,7 @@
 //   That's it. toJson() and applyJson() pick it up automatically.
 // =============================================================================
 
-#pragma             // only include this file once per .cpp, even if #included twice
+#pragma once         // only include this file once per .cpp, even if #included twice
 
 #include <string>   // std::string
 #include <vector>   // std::vector, used for the list fields

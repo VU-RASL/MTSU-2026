@@ -5,8 +5,8 @@ FROM debian:bookworm-slim
 # then remove package lists to keep the image smaller. Backslashes continue one command.
 RUN apt-get update \
     && apt-get install -y --no-install-recommends g++ cmake make libasio-dev curl \
+       python3 libcurl4-openssl-dev ca-certificates \
     && rm -rf /var/lib/apt/lists/*
-
 # Use /app as the working directory for subsequent instructions and startup.
 WORKDIR /app
 # Copy the backend build context into /app, excluding .dockerignore patterns.
