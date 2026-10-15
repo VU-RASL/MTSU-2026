@@ -2,6 +2,7 @@ import { BrowserRouter as Router, Routes, Route } from 'react-router-dom'
 import Home from './pages/Home'
 import PersonaCreator from './pages/PersonaCreator'
 import StudentPortal from './pages/StudentPortal'
+import Learning from './pages/Learning'
 import './App.css'
 
 function App() {
@@ -18,6 +19,7 @@ function App() {
           <Route path="/" element={<Home />} />
           <Route path="/persona-creator" element={<PersonaCreator />} />
           <Route path="/student-portal" element={<StudentPortal />} />
+          <Route path="/learning" element={<Learning />} />
         </Routes>
       </Router>
     </>
