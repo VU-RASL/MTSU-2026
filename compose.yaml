@@ -71,8 +71,8 @@ services:
         host_ip: "127.0.0.1"
     # Mount source and a separate dependency directory.
     volumes:
-      # Mount frontend source at /app; edit it on your computer.
-      - ./frontend:/app:ro
+      # Mount frontend source at /app; keep it writable for the nested dependency volume.
+      - ./frontend:/app
       # Writable Linux dependencies, separate from host node_modules.
       - frontend_node_modules:/app/node_modules
     # Control startup order.

@@ -213,9 +213,10 @@ Restore those edits after checking.
 
 Edit on your computer. Docker runs the tools and servers. Frontend edits reload
 automatically; backend edits require `docker compose restart backend`. You do
-not need to open a shell in a container for routine development. The source
-mounts are read-only from inside the containers, so container commands cannot
-edit those source files.
+not need to open a shell in a container for routine development. The backend
+source mount is read-only. The frontend mount is writable so Docker can mount
+its separate dependency volume at `/app/node_modules`; avoid running commands
+that modify frontend source or package files unless those changes are intended.
 
 ### Where do compile errors appear when I restart the backend?
 
@@ -342,11 +343,11 @@ For a command that does not need to modify source, use a running service:
 docker compose exec frontend npm run lint
 ```
 
-Commands that write into the mounted source directory may fail because it is
-read-only. For example, `npm run build` writes `dist/`, and `npm install` edits
-package files. Use the documented local workflow with Node.js for those tasks,
-or deliberately adjust the mount if you need a different workflow. Changes to
-container files outside mounts disappear when that container is removed.
+The backend source directory is mounted read-only. The frontend source directory
+is writable, so commands such as `npm run build` can write `dist/` and `npm
+install` can edit package files on your computer. Run those only when the
+resulting changes are intended. Changes to container files outside mounts
+disappear when that container is removed.
 
 ### Is this ready for production hosting?
 
