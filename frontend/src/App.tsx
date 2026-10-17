@@ -3,6 +3,7 @@ import Home from './pages/Home'
 import PersonaCreator from './pages/PersonaCreator'
 import StudentPortal from './pages/StudentPortal'
 import Learning from './pages/Learning'
+import EducatorReview from './pages/EducatorReview'
 import './App.css'
 
 function App() {
@@ -20,6 +21,7 @@ function App() {
           <Route path="/persona-creator" element={<PersonaCreator />} />
           <Route path="/student-portal" element={<StudentPortal />} />
           <Route path="/learning" element={<Learning />} />
+          <Route path="/educator-review" element={<EducatorReview />} />
         </Routes>
       </Router>
     </>
