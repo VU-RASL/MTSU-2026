@@ -1,6 +1,6 @@
 /*header and footer styles */
 .header {
-  display: flex;
+  position: relative;
   background-color: var(--header-bg);
   color: var(--header-text);
   padding: 16px;
@@ -13,6 +13,7 @@
   font-size: 40px;
   font-weight: bold;
   color: var(--header-text);
+  margin: 0;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -20,31 +21,74 @@
 .header-content {
   box-sizing: border-box;
   width: 100%;
-  height: 100%;
+  height: auto;
   display: flex;
-  flex-direction: row;
-  flex-wrap: wrap;
   align-items: center;
   justify-content: space-between;
 }
+.header-menu-toggle {
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  gap: 5px;
+  width: 44px;
+  height: 44px;
+  padding: 9px;
+  border: 2px solid var(--header-text);
+  border-radius: 8px;
+  background: transparent;
+  color: var(--header-text);
+  cursor: pointer;
+}
+.header-menu-toggle span {
+  display: block;
+  width: 100%;
+  height: 2px;
+  background-color: currentColor;
+}
+.header-menu-toggle:focus-visible,
+.header-nav-item a:focus-visible {
+  outline: 3px solid var(--accent);
+  outline-offset: 3px;
+}
+.header-nav {
+  display: none;
+  position: absolute;
+  top: 100%;
+  right: 16px;
+  z-index: 10;
+  width: min(280px, calc(100vw - 32px));
+  background-color: var(--header-bg);
+  box-shadow: var(--shadow);
+}
+.header-nav.is-open {
+  display: block;
+}
 .header-nav-list {
   display: flex;
+  flex-direction: column;
   list-style: none;
-  gap: 16px;
-  justify-content: space-between;
+  gap: 0;
+  margin: 0;
+  padding: 8px;
 }
 .header-nav-item {
-  padding: 8px;
-  border: 2px solid var(--header-text);
-  border-radius: 10px;
-  background-color: var(--header-text);
-  text-decoration: none;
+  padding: 0;
+  border-bottom: 1px solid var(--header-text);
+}
+.header-nav-item:last-child {
+  border-bottom: 0;
 }
 .header-nav-item a {
-  color: white;
+  display: block;
+  padding: 12px;
+  color: var(--header-text);
   text-decoration: none;
   font-weight: bold;
   font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+}
+.header-nav-item a:hover {
+  background-color: var(--accent-bg);
 }
 
 .footer {
@@ -62,7 +106,7 @@
   padding: 16px;
   box-sizing: border-box;
   width: 100%;
-  height: 90vh;
+  flex: 1 0 auto;
 }
 .home-content {
   display: flex;
@@ -187,4 +231,44 @@
   .persona-creator button {
     align-self: stretch;
   }
+}
+
+/* Educator Review Styles */
+
+.educator-review {
+  max-width: 1100px;
+  margin: 0 auto;
+  padding: 30px;
+}
+
+.module-grid {
+  display: grid;
+  grid-template-columns: repeat(
+    auto-fit,
+    minmax(min(100%, 260px), 1fr)
+  );
+  gap: 20px;
+  margin: 24px 0;
+}
+
+.module-card {
+  border: 1px solid #ccc;
+  border-radius: 8px;
+  padding: 20px;
+}
+
+.module-card h3 {
+  margin-top: 0;
+}
+
+.educator-review .form-group {
+  margin-bottom: 16px;
+}
+
+.educator-review select {
+  display: block;
+  width: 100%;
+  max-width: 400px;
+  padding: 10px;
+  margin-top: 6px;
 }
