@@ -220,6 +220,53 @@ int main() {
         }
         return crow::response(200, crow::json::wvalue(std::move(items)));
     });
+    // GET /api/personas/schema
+    // Provides the frontend with metadata for generating the create form.
+    // Each path must match a field accepted by applyJson() in persona.cpp;
+    // the frontend uses that path both to build the nested POST body and to
+    // choose the right input type/label.
+    CROW_ROUTE(app, "/api/personas/schema").methods("GET"_method)
+    ([] {
+        // Build one schema object per UI field. Crow's writable JSON values
+        // serialize these entries as the "fields" array in the response.
+        std::vector<crow::json::wvalue> fields;
+
+        // Centralize the common metadata for a field so all schema entries
+        // have the same shape. "required" controls browser required-ness;
+        // "multiple" tells the frontend to convert a textarea into a list.
+        auto addField = [&fields](
+            const char* path,
+            const char* label,
+            const char* type,
+            bool required = false,
+            bool multiple = false
+        ) {
+            crow::json::wvalue field;
+            // "path" is an API JSON path (possibly nested), not just a UI id.
+            field["path"] = path;
+            field["label"] = label;
+            field["type"] = type;
+            field["required"] = required;
+            field["multiple"] = multiple;
+            fields.push_back(std::move(field));
+        };
+
+        // These paths align with the existing Persona model/JSON parser:
+        // title and summary are top-level; name and age are under identity;
+        // bio uses the existing presentation.misc string; goals is a list.
+        addField("identity.name", "Name", "text");
+        addField("identity.age", "Age", "number");
+        addField("presentation.misc", "Bio", "textarea");
+        addField("title", "Persona Title", "text", true);
+        addField("summary", "Persona Summary", "textarea");
+        addField("goals", "Goal", "textarea", false, true);
+
+        // Wrap the field descriptions in an object so the frontend receives
+        // { "fields": [ ... ] } and can validate/render the response.
+        crow::json::wvalue schema;
+        schema["fields"] = std::move(fields);
+        return crow::response(200, std::move(schema));
+    });
 
     // -------------------------------------------------------------------------
     // POST /api/personas
