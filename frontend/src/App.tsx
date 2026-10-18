@@ -5,6 +5,7 @@ import StudentPortal from './pages/StudentPortal'
 import Learning from './pages/Learning'
 import EducatorReview from './pages/EducatorReview'
 import './App.css'
+import RTC from './pages/RTC'
 
 function App() {
   //Using react router dom to manage routing between pages.
@@ -22,6 +23,7 @@ function App() {
           <Route path="/student-portal" element={<StudentPortal />} />
           <Route path="/learning" element={<Learning />} />
           <Route path="/educator-review" element={<EducatorReview />} />
+          <Route path="/rtc" element={<RTC />} />
         </Routes>
       </Router>
     </>
