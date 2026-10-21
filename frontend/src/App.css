@@ -233,9 +233,9 @@
   }
 }
 
-/* Educator Review Styles */
+/* Educator Portal Styles */
 
-.educator-review {
+.educator-portal {
   max-width: 1100px;
   margin: 0 auto;
   padding: 30px;
@@ -261,11 +261,11 @@
   margin-top: 0;
 }
 
-.educator-review .form-group {
+.educator-portal .form-group {
   margin-bottom: 16px;
 }
 
-.educator-review select {
+.educator-portal select {
   display: block;
   width: 100%;
   max-width: 400px;

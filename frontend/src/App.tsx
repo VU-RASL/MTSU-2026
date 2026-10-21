@@ -3,7 +3,7 @@ import Home from './pages/Home'
 import PersonaCreator from './pages/PersonaCreator'
 import StudentPortal from './pages/StudentPortal'
 import Learning from './pages/Learning'
-import EducatorReview from './pages/EducatorReview'
+import EducatorPortal from './pages/EducatorPortal'
 import './App.css'
 import RTC from './pages/RTC'
 
@@ -22,7 +22,7 @@ function App() {
           <Route path="/persona-creator" element={<PersonaCreator />} />
           <Route path="/student-portal" element={<StudentPortal />} />
           <Route path="/learning" element={<Learning />} />
-          <Route path="/educator-review" element={<EducatorReview />} />
+          <Route path="/educator-portal" element={<EducatorPortal />} />
           <Route path="/rtc" element={<RTC />} />
         </Routes>
       </Router>

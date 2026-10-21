@@ -29,7 +29,7 @@ const Header: React.FC = () => {
                         <li className="header-nav-item"><a href="/persona-creator">Create Persona</a></li>
                         <li className="header-nav-item"><a href="/student-portal">Student Portal</a></li>
                         <li className="header-nav-item"><a href="/learning">Learning</a></li>
-                        <li className="header-nav-item"><a href="/educator-review">Educator Review</a></li>
+                        <li className="header-nav-item"><a href="/educator-portal">Educator Portal</a></li>
                     </ul>
                 </nav>
             </div>
