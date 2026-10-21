@@ -12,5 +12,8 @@ add_executable(server
     src/main.cpp
     src/persona.cpp
     src/persona_store.cpp
+    src/supabase_client.cpp
+    src/learning_topic.cpp
+    src/learning_topic_store.cpp
     )
 target_link_libraries(server PRIVATE Crow::Crow CURL::libcurl)
