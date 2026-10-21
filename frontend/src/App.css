@@ -261,6 +261,58 @@
   margin-top: 0;
 }
 
+
+/* Educator Portal Assignment Section */
+
+.module-assignment {
+    margin: 24px 0 40px;
+    padding: 24px;
+    border: 1px solid #ccc;
+    border-radius: 12px;
+    background-color: #fff;
+}
+
+.module-assignment h2 {
+    margin-top: 0;
+    margin-bottom: 20px;
+}
+
+.assignment-fields {
+    display: grid;
+    grid-template-columns: repeat(
+        auto-fit,
+        minmax(min(100%, 250px), 1fr)
+    );
+    gap: 20px;
+    margin-bottom: 20px;
+}
+
+.module-assignment label {
+    color: #222;
+}
+
+.module-assignment select {
+    width: 100%;
+    padding: 10px;
+    border: 1px solid #ccc;
+    border-radius: 6px;
+    background-color: white;
+    color: #222;
+}
+
+.module-assignment button {
+    background-color: var(--accent);
+    color: white;
+    border: none;
+    padding: 12px 20px;
+    border-radius: 8px;
+    cursor: pointer;
+}
+
+.module-assignment button:hover {
+    filter: brightness(0.92);
+}
+
 .educator-portal .form-group {
   margin-bottom: 16px;
 }
