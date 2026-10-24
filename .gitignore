@@ -1,3 +1,5 @@
-# Local Docker Compose settings; keep each developer's overrides out of Git.
-.env
-.vscode/
+
+
+
+
+
