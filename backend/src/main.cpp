@@ -249,29 +249,110 @@ int main() {
         auto addField = [&fields](
             const char* path,
             const char* label,
+            const char* description,
             const char* type,
+            const char* section,
+            const char* sectionDescription,
             bool required = false,
             bool multiple = false
         ) {
             crow::json::wvalue field;
-            // "path" is an API JSON path (possibly nested), not just a UI id.
             field["path"] = path;
             field["label"] = label;
+            field["description"] = description;
             field["type"] = type;
+            field["section"] = section;
+            field["sectionDescription"] = sectionDescription;
             field["required"] = required;
             field["multiple"] = multiple;
             fields.push_back(std::move(field));
         };
 
-        // These paths align with the existing Persona model/JSON parser:
-        // title and summary are top-level; name and age are under identity;
-        // bio uses the existing presentation.misc string; goals is a list.
-        addField("identity.name", "Name", "text");
-        addField("identity.age", "Age", "number");
-        addField("presentation.misc", "Bio", "textarea");
-        addField("title", "Persona Title", "text", true);
-        addField("summary", "Persona Summary", "textarea");
-        addField("goals", "Goal", "textarea", false, true);
+        addField("title", "Persona Title", "A descriptive title of this persona.",
+                 "text", "Persona Details", "", true);
+        addField("summary", "Persona Summary", "A brief summary of the persona's key details.",
+                 "textarea", "Persona Details", "");
+        addField("metadata.contentWarnings", "Content Warnings",
+                 "Specific warnings about sensitive or triggering content associated with the persona, helping to ensure safe and informed interactions.",
+                 "textarea", "Safety Notes",
+                 "Important context to support safe and informed interactions.", false, true);
+        addField("presentation.affect", "Affect",
+                 "Details the persona's emotional state or mood.",
+                 "textarea", "Presentation & Behavior",
+                 "Describes how the persona presents and behaves.");
+        addField("presentation.speech", "Speech",
+                 "Details how the persona communicates verbally.",
+                 "textarea", "Presentation & Behavior",
+                 "Describes how the persona presents and behaves.");
+        addField("presentation.misc", "Misc",
+                 "Additional behaviors or characteristics not covered elsewhere.",
+                 "textarea", "Presentation & Behavior",
+                 "Describes how the persona presents and behaves.");
+        addField("identity.name", "Name", "The persona's name.",
+                 "text", "Identity", "Information about the persona's identity.");
+        addField("identity.age", "Age", "The persona's age.",
+                 "number", "Identity", "Information about the persona's identity.");
+        addField("identity.ethnicity", "Ethnicity", "The persona's ethnicity.",
+                 "text", "Identity", "Information about the persona's identity.");
+        addField("identity.sex", "Sex", "Sex assigned at birth.",
+                 "text", "Identity", "Information about the persona's identity.");
+        addField("identity.gender", "Gender", "The persona's gender identity.",
+                 "text", "Identity", "Information about the persona's identity.");
+        addField("identity.sexualOrientation", "Sexual Orientation",
+                 "The persona's sexual orientation.",
+                 "text", "Identity", "Information about the persona's identity.");
+        addField("health.chiefComplaint", "Chief Complaint",
+                 "The main reason the persona is seeking care.",
+                 "textarea", "Health", "Details about the persona's health.");
+        addField("health.diagnosis.differential", "Differential",
+                 "Possible diagnoses being considered.",
+                 "textarea", "Diagnosis", "Information about the persona's diagnoses.",
+                 false, true);
+        addField("health.diagnosis.actual", "Actual",
+                 "The confirmed diagnosis.",
+                 "textarea", "Diagnosis", "Information about the persona's diagnoses.");
+        addField("health.historyOfPresentIllness.medicationsAndAllergies",
+                 "Medications and Allergies", "The persona's medications and allergies.",
+                 "textarea", "Current Health Issue",
+                 "Details of the persona's current health issue.", false, true);
+        addField("health.pastMedicalHistory", "Past Medical History",
+                 "The persona's past medical history.",
+                 "textarea", "Health", "Details about the persona's health.",
+                 false, true);
+        addField("health.familyMedicalHistory", "Family Medical History",
+                 "The persona's family medical history.",
+                 "textarea", "Health", "Details about the persona's health.",
+                 false, true);
+        addField("health.psychiatricProfile", "Psychiatric Profile",
+                 "The persona's psychiatric history or profile.",
+                 "textarea", "Health", "Details about the persona's health.");
+        addField("goals", "Goals", "The goals or objectives of the persona.",
+                 "textarea", "Additional Details", "", false, true);
+        addField("challenges", "Challenges", "The challenges faced by the persona.",
+                 "textarea", "Additional Details", "", false, true);
+        addField("thoughtsAndFeelings", "Thoughts and Feelings",
+                 "The persona's thoughts and feelings.",
+                 "textarea", "Additional Details", "", false, true);
+        addField("tasksAndActivities", "Tasks and Activities",
+                 "Tasks or activities relevant to the persona.",
+                 "textarea", "Additional Details", "", false, true);
+        addField("influencesAndSupports", "Influences and Supports",
+                 "The persona's social supports and influences.",
+                 "textarea", "Additional Details", "", false, true);
+        addField("socialHistory", "Social History", "The persona's social history.",
+                 "textarea", "Additional Details", "", false, true);
+        addField("culturalComponents", "Cultural Components",
+                 "Cultural aspects relevant to the persona.",
+                 "textarea", "Additional Details", "", false, true);
+        addField("emotionalWellbeing", "Emotional Wellbeing",
+                 "Details about the persona's emotional wellbeing.",
+                 "textarea", "Additional Details", "", false, true);
+        addField("socialDeterminantsOfHealth", "Social Determinants of Health",
+                 "Factors impacting the persona's health from a social perspective.",
+                 "textarea", "Additional Details", "", false, true);
+        addField("promptsAndSpecialInstructions", "Prompts and Special Instructions",
+                 "Special instructions or prompts related to the persona.",
+                 "textarea", "Additional Details", "", false, true);
 
         // Wrap the field descriptions in an object so the frontend receives
         // { "fields": [ ... ] } and can validate/render the response.

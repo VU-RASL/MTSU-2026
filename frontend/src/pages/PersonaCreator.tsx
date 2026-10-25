@@ -15,7 +15,10 @@ type FieldType = 'text' | 'number' | 'textarea'
 type FormField = {
     path: string
     label: string
+    description: string
     type: FieldType
+    section: string
+    sectionDescription: string
     required: boolean
     multiple: boolean
 }
@@ -55,7 +58,10 @@ function isFormSchema(value: unknown): value is FormSchema {
         return typeof field.path === 'string'
             && field.path.length > 0
             && typeof field.label === 'string'
+            && typeof field.description === 'string'
             && (field.type === 'text' || field.type === 'number' || field.type === 'textarea')
+            && typeof field.section === 'string'
+            && typeof field.sectionDescription === 'string'
             && typeof field.required === 'boolean'
             && typeof field.multiple === 'boolean'
     })
@@ -231,41 +237,43 @@ const PersonaCreator: React.FC = () => {
                             {/* A schema entry creates one labeled input. Using
                                 the backend path as the key/ID keeps labels,
                                 state, and payload mapping tied to that field. */}
-                            {schema.fields.map((field) => (
-                                <div key={field.path} className="form-group">
-                                    <label htmlFor={field.path}>{field.label}</label>
-                                    {/* Textareas and inputs share the same state
-                                        model; the schema chooses which control
-                                        is rendered and whether it is required. */}
-                                    {field.type === 'textarea' ? (
-                                        <textarea
-                                            id={field.path}
-                                            required={field.required}
-                                            value={values[field.path] ?? ''}
-                                            onChange={(event) => setValues({
-                                                ...values,
-                                                [field.path]: event.target.value,
-                                            })}
-                                        />
-                                    ) : (
-                                        <input
-                                            id={field.path}
-                                            type={field.type}
-                                            required={field.required}
-                                            // Age uses integer steps to align
-                                            // browser input with API validation.
-                                            step={field.type === 'number' ? 1 : undefined}
-                                            value={values[field.path] ?? ''}
-                                            onChange={(event) => setValues({
-                                                ...values,
-                                                [field.path]: event.target.value,
-                                            })}
-                                        />
+                            {schema.fields.map((field, index) => (
+                                <React.Fragment key={field.path}>
+                                    {(index === 0 || schema.fields[index - 1].section !== field.section) && (
+                                        <section className="persona-form-section">
+                                            <h2>{field.section}</h2>
+                                            {field.sectionDescription && <p>{field.sectionDescription}</p>}
+                                        </section>
                                     )}
-                                    {/* Explain how a list-valued textarea is
-                                        converted into an array on submission. */}
-                                    {field.multiple && <small>Enter one item per line.</small>}
-                                </div>
+                                    <div className="form-group">
+                                        <label htmlFor={field.path}>{field.label}</label>
+                                        <small>{field.description}</small>
+                                        {field.type === 'textarea' ? (
+                                            <textarea
+                                                id={field.path}
+                                                required={field.required}
+                                                value={values[field.path] ?? ''}
+                                                onChange={(event) => setValues({
+                                                    ...values,
+                                                    [field.path]: event.target.value,
+                                                })}
+                                            />
+                                        ) : (
+                                            <input
+                                                id={field.path}
+                                                type={field.type}
+                                                required={field.required}
+                                                step={field.type === 'number' ? 1 : undefined}
+                                                value={values[field.path] ?? ''}
+                                                onChange={(event) => setValues({
+                                                    ...values,
+                                                    [field.path]: event.target.value,
+                                                })}
+                                            />
+                                        )}
+                                        {field.multiple && <small>Enter one item per line.</small>}
+                                    </div>
+                                </React.Fragment>
                             ))}
                             {/* Disable repeat submits while the POST is pending,
                                 and make the button label reflect that state. */}

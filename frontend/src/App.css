@@ -159,6 +159,24 @@
   color: white;
 }
 
+.persona-form-section {
+  border-top: 1px solid var(--border);
+  padding-top: 12px;
+}
+
+.persona-form-section h2 {
+  margin: 0 0 6px;
+  color: white;
+}
+
+.persona-form-section p,
+.form-group small {
+  margin: 0;
+  color: var(--text);
+  font-size: 13px;
+  line-height: 1.5;
+}
+
 .form-group {
   display: flex;
   flex-direction: column;

@@ -80,6 +80,7 @@ All routes send and receive JSON.
 |---|---|---|
 | GET | `/api/health` | Checks that the server is up |
 | GET | `/api/personas` | Lists all personas. Add `?search=text` to filter. |
+| GET | `/api/personas/schema` | Returns persona form fields with descriptions and JSON paths. |
 | GET | `/api/personas/:id` | Gets one persona |
 | POST | `/api/personas` | Creates a persona (`title` is required) |
 | PUT | `/api/personas/:id` | Updates a persona. Only the fields you send change. |
@@ -94,6 +95,10 @@ All routes send and receive JSON.
 Scenarios are stored in the backend process and reset when the server restarts.
 They do not require a Supabase table. The personas API continues to use the
 existing Supabase `personas` table.
+
+The persona schema includes the full set of persona details and returns each
+field's description, section, input type, and nested JSON path. The create form
+uses that schema to build a request compatible with the persona API.
 
 Example create:
 
