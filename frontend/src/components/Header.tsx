@@ -25,8 +25,10 @@ const Header: React.FC = () => {
                     aria-label="Main navigation"
                 >
                     <ul className="header-nav-list">
-                        <li className="header-nav-item"><a href="/">Home</a></li>
+                        <li className="header-nav-item"><a href="/">login</a></li>
+                        <li className="header-nav-item"><a href="/home">Home</a></li>
                         <li className="header-nav-item"><a href="/persona-creator">Create Persona</a></li>
+                        <li className="header-nav-item"><a href="/scenario-creator">Create Scenario</a></li>
                         <li className="header-nav-item"><a href="/student-portal">Student Portal</a></li>
                         <li className="header-nav-item"><a href="/learning">Learning</a></li>
                         <li className="header-nav-item"><a href="/educator-review">Educator Review</a></li>

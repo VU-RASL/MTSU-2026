@@ -64,6 +64,8 @@
 #include "crow/middlewares/cors.h"    // CORS support (explained in main below)
 #include "persona.h"                  // Persona, toJson(), applyJson()
 #include "persona_store.h"            // PersonaStore
+#include "scenario.h"                 // Scenario, toJson(), applyJson()
+#include "scenario_store.h"           // ScenarioStore
 
 // Helpers private to this file.
 namespace {
@@ -87,37 +89,46 @@ void checkSupabase() {
         throw std::runtime_error("Could not initialize HTTP client");
     }
 
-    std::string url = std::string(baseUrl) + "/rest/v1/personas?select=id&limit=1";
     std::string keyHeader = std::string("apikey: ") + secretKey;
+    std::string normalizedBaseUrl(baseUrl);
+    while (!normalizedBaseUrl.empty() && normalizedBaseUrl.back() == '/') {
+        normalizedBaseUrl.pop_back();
+    }
     std::string body;
 
     curl_slist* headers = nullptr;
     headers = curl_slist_append(headers, keyHeader.c_str());
     headers = curl_slist_append(headers, "Accept: application/json");
 
-    curl_easy_setopt(curl, CURLOPT_URL, url.c_str());
     curl_easy_setopt(curl, CURLOPT_HTTPHEADER, headers);
     curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, receiveBody);
     curl_easy_setopt(curl, CURLOPT_WRITEDATA, &body);
     curl_easy_setopt(curl, CURLOPT_CONNECTTIMEOUT, 5L);
     curl_easy_setopt(curl, CURLOPT_TIMEOUT, 15L);
 
-    const CURLcode result = curl_easy_perform(curl);
-
-    long status = 0;
-    curl_easy_getinfo(curl, CURLINFO_RESPONSE_CODE, &status);
+    try {
+        const std::string url =
+            normalizedBaseUrl + "/rest/v1/personas?select=id&limit=1";
+        curl_easy_setopt(curl, CURLOPT_URL, url.c_str());
+        const CURLcode result = curl_easy_perform(curl);
+        long status = 0;
+        curl_easy_getinfo(curl, CURLINFO_RESPONSE_CODE, &status);
+        if (result != CURLE_OK) {
+            throw std::runtime_error(curl_easy_strerror(result));
+        }
+        if (status != 200) {
+            throw std::runtime_error(
+                "Supabase connection check for personas returned HTTP " +
+                std::to_string(status));
+        }
+    } catch (...) {
+        curl_slist_free_all(headers);
+        curl_easy_cleanup(curl);
+        throw;
+    }
 
     curl_slist_free_all(headers);
     curl_easy_cleanup(curl);
-
-    if (result != CURLE_OK) {
-        throw std::runtime_error(curl_easy_strerror(result));
-    }
-
-    if (status != 200) {
-        throw std::runtime_error("Supabase connection check returned HTTP " + std::to_string(status));
-    }
-
     std::cout << "Supabase connection successful\n";
 }
 
@@ -189,6 +200,7 @@ int main() {
     // 2. Create the store and add the sample persona
     // -------------------------------------------------------------------------
     PersonaStore store;
+    ScenarioStore scenarioStore;
 
     // -------------------------------------------------------------------------
     // GET /api/health
@@ -343,6 +355,103 @@ int main() {
         return crow::response(204);
     });
 
+    CROW_ROUTE(app, "/api/scenarios").methods("GET"_method)
+    ([&scenarioStore](const crow::request& req) {
+        // Read ?search=... from the URL. get() returns nullptr if it's not there.
+        const char* search = req.url_params.get("search");
+
+        std::vector<crow::json::wvalue> items;  // the JSON array we'll send
+        // No search given -> pass "" so the store returns everything.
+        for (const auto& p : scenarioStore.list(search ? search : "")) {
+            items.push_back(toJson(p));         // convert each scenario to JSON
+        }
+        return crow::response(200, crow::json::wvalue(std::move(items)));
+    });
+    CROW_ROUTE(app, "/api/scenarios/schema").methods("GET"_method)
+    ([] {
+        // Build one schema object per UI field. Crow's writable JSON values
+        // serialize these entries as the "fields" array in the response.
+        std::vector<crow::json::wvalue> fields;
+
+        // Centralize the common metadata for a field so all schema entries
+        // have the same shape. "required" controls browser required-ness;
+        // "multiple" tells the frontend to convert a textarea into a list.
+        auto addField = [&fields](
+            const char* path,
+            const char* label,
+            const char* type,
+            bool required = false,
+            bool multiple = false
+        ) {
+            crow::json::wvalue field;
+            // "path" is an API JSON path (possibly nested), not just a UI id.
+            field["path"] = path;
+            field["label"] = label;
+            field["type"] = type;
+            field["required"] = required;
+            field["multiple"] = multiple;
+            fields.push_back(std::move(field));
+        };
+
+        addField("title", "Scenario Title", "text", true);
+        addField("summary", "Scenario Summary", "textarea");
+        addField("setting", "Setting", "text");
+        addField("difficulty", "Difficulty", "text");
+        addField("learningObjectives", "Learning Objectives", "textarea", false, true);
+        addField("instructions", "Instructions", "textarea");
+        addField("patientSituation", "Patient Situation", "textarea");
+        addField("requiredTasks", "Required Tasks", "textarea", false, true);
+
+        // Wrap the field descriptions in an object so the frontend receives
+        // { "fields": [ ... ] } and can validate/render the response.
+        crow::json::wvalue schema;
+        schema["fields"] = std::move(fields);
+        return crow::response(200, std::move(schema));
+    });
+
+    CROW_ROUTE(app, "/api/scenarios").methods("POST"_method)
+    ([&scenarioStore](const crow::request& req) {
+        auto body = crow::json::load(req.body);
+        if (!body) return jsonError(400, "Invalid JSON");
+
+        Scenario scenario;
+        std::string error;
+        if (!applyJson(body, scenario, error)) return jsonError(400, error);
+
+        return crow::response(201, toJson(scenarioStore.create(std::move(scenario))));
+    });
+
+    CROW_ROUTE(app, "/api/scenarios/<int>").methods("GET"_method)
+    ([&scenarioStore](int id) {
+        auto scenario = scenarioStore.get(id);
+        if (!scenario) return jsonError(404, "Scenario not found");
+        return crow::response(200, toJson(*scenario));
+    });
+
+    CROW_ROUTE(app, "/api/scenarios/<int>").methods("PUT"_method)
+    ([&scenarioStore](const crow::request& req, int id) {
+        auto existing = scenarioStore.get(id);
+        if (!existing) return jsonError(404, "Scenario not found");
+
+        auto body = crow::json::load(req.body);
+        if (!body) return jsonError(400, "Invalid JSON");
+
+        Scenario updated = *existing;
+        std::string error;
+        if (!applyJson(body, updated, error)) return jsonError(400, error);
+
+        if (!scenarioStore.update(updated)) {
+            return jsonError(404, "Scenario not found");
+        }
+
+        return crow::response(200, toJson(updated));
+    });
+
+    CROW_ROUTE(app, "/api/scenarios/<int>").methods("DELETE"_method)
+    ([&scenarioStore](int id) {
+        if (!scenarioStore.remove(id)) return jsonError(404, "Scenario not found");
+        return crow::response(204);
+    });
     // -------------------------------------------------------------------------
     // 3. Start the server
     //

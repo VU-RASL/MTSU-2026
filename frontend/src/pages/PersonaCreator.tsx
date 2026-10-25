@@ -218,7 +218,7 @@ const PersonaCreator: React.FC = () => {
             <Header />
             <div className="content">
                 <div className="persona-creator">
-                    <h1>Persona Creator</h1>
+                    <h1 style={{ color: 'white' }}>Persona Creator</h1>
 
                     {/* Display distinct feedback states above the generated form. */}
                     {loading && <p>Loading form...</p>}
