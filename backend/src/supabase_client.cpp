@@ -6,6 +6,7 @@
 
 #include <curl/curl.h>
 
+#include <cctype>
 #include <cstdlib>
 #include <memory>
 #include <stdexcept>
@@ -109,4 +110,20 @@ crow::json::rvalue SupabaseClient::parseRows(const std::string& response) {
         throw std::runtime_error("Supabase returned an invalid row list");
     }
     return rows;
+}
+
+std::string SupabaseClient::encode(const std::string& value) {
+    // Percent-encode everything except unreserved URL characters (RFC 3986)
+    static const char* hex = "0123456789ABCDEF";
+    std::string out;
+    for (unsigned char c : value) {
+        if (std::isalnum(c) || c == '-' || c == '_' || c == '.' || c == '~') {
+            out += static_cast<char>(c);
+        } else {
+            out += '%';
+            out += hex[c >> 4];
+            out += hex[c & 0x0F];
+        }
+    }
+    return out;
 }

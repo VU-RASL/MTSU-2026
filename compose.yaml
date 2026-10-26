@@ -24,6 +24,8 @@ services:
       # Pass the Supabase credentials from the root .env into the backend.
       SUPABASE_URL: "${SUPABASE_URL:?SUPABASE_URL is required}"
       SUPABASE_SECRET_KEY: "${SUPABASE_SECRET_KEY:?SUPABASE_SECRET_KEY is required}"
+      # Temporary: profiles.id to act as when a request has no X-User-Id header.
+      DEV_USER_ID: "${DEV_USER_ID:-}"
     # Publish container ports on your computer.
     ports:
       # Map the customizable host port to the fixed internal API port.
