@@ -66,6 +66,9 @@
 #include "persona_store.h"            // PersonaStore
 #include "learning_topic.h"           // LearningTopic, toJson(), applyJson()
 #include "learning_topic_store.h"     // LearningTopicStore
+#include "assignment_store.h"         // AssignmentStore (Educator Portal)
+#include "session_result_store.h"     // SessionResultStore (Educator Portal)
+#include "educator_routes.h"          // registerEducatorRoutes()
 
 // Helpers private to this file.
 namespace {
@@ -192,6 +195,8 @@ int main() {
     // -------------------------------------------------------------------------
     PersonaStore store;
     LearningTopicStore topics;  // the Learning page's topics (Supabase table: learning_topics)
+    AssignmentStore assignments;     // Educator Portal (Supabase table: assignments)
+    SessionResultStore results;      // Educator Portal (Supabase table: session_results)
 
     // -------------------------------------------------------------------------
     // GET /api/health
@@ -360,6 +365,9 @@ int main() {
         if (!topics.remove(id)) return jsonError(404, "Learning topic not found");
         return crow::response(204);
     });
+
+    // Educator Portal: assignments and session results (see educator_routes.cpp)
+    registerEducatorRoutes(app, assignments, results);
 
     // -------------------------------------------------------------------------
     // 3. Start the server

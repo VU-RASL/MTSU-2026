@@ -41,6 +41,9 @@ public:
     // Throws if it isn't.
     static crow::json::rvalue parseRows(const std::string& response);
 
+    // Makes text safe to put in a URL filter, e.g. "student_id=eq." + encode(id).
+    static std::string encode(const std::string& value);
+
 private:
     std::string baseUrl_;
     std::string secretKey_;
