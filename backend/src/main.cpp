@@ -64,6 +64,11 @@
 #include "crow/middlewares/cors.h"    // CORS support (explained in main below)
 #include "persona.h"                  // Persona, toJson(), applyJson()
 #include "persona_store.h"            // PersonaStore
+#include "learning_topic.h"           // LearningTopic, toJson(), applyJson()
+#include "learning_topic_store.h"     // LearningTopicStore
+#include "assignment_store.h"         // AssignmentStore (Educator Portal)
+#include "session_result_store.h"     // SessionResultStore (Educator Portal)
+#include "educator_routes.h"          // registerEducatorRoutes()
 
 // Helpers private to this file.
 namespace {
@@ -189,6 +194,9 @@ int main() {
     // 2. Create the store and add the sample persona
     // -------------------------------------------------------------------------
     PersonaStore store;
+    LearningTopicStore topics;  // the Learning page's topics (Supabase table: learning_topics)
+    AssignmentStore assignments;     // Educator Portal (Supabase table: assignments)
+    SessionResultStore results;      // Educator Portal (Supabase table: session_results)
 
     // -------------------------------------------------------------------------
     // GET /api/health
@@ -295,6 +303,71 @@ int main() {
         if (!store.remove(id)) return jsonError(404, "Persona not found");
         return crow::response(204);
     });
+
+    // =========================================================================
+    // Learning topics (the Learning page)
+    // Same pattern as the persona routes above.
+    // =========================================================================
+
+    // GET /api/learning-topics  -> all topics, in page order
+    CROW_ROUTE(app, "/api/learning-topics").methods("GET"_method)
+    ([&topics] {
+        std::vector<crow::json::wvalue> items;
+        for (const auto& t : topics.list()) {
+            items.push_back(toJson(t));
+        }
+        return crow::response(200, crow::json::wvalue(std::move(items)));
+    });
+
+    // POST /api/learning-topics  -> create (title required)
+    //   201  the new topic, with id and createdAt
+    //   400  bad JSON, wrong type, or no title
+    CROW_ROUTE(app, "/api/learning-topics").methods("POST"_method)
+    ([&topics](const crow::request& req) {
+        auto body = crow::json::load(req.body);
+        if (!body) return jsonError(400, "Invalid JSON");
+
+        LearningTopic t;
+        std::string error;
+        if (!applyJson(body, t, error)) return jsonError(400, error);
+
+        return crow::response(201, toJson(topics.create(t)));
+    });
+
+    // GET /api/learning-topics/<id>  -> one topic
+    CROW_ROUTE(app, "/api/learning-topics/<int>").methods("GET"_method)
+    ([&topics](int id) {
+        auto t = topics.get(id);
+        if (!t) return jsonError(404, "Learning topic not found");
+        return crow::response(200, toJson(*t));
+    });
+
+    // PUT /api/learning-topics/<id>  -> update; only the fields sent change
+    CROW_ROUTE(app, "/api/learning-topics/<int>").methods("PUT"_method)
+    ([&topics](const crow::request& req, int id) {
+        auto existing = topics.get(id);
+        if (!existing) return jsonError(404, "Learning topic not found");
+
+        auto body = crow::json::load(req.body);
+        if (!body) return jsonError(400, "Invalid JSON");
+
+        LearningTopic updated = *existing;  // keeps id and createdAt
+        std::string error;
+        if (!applyJson(body, updated, error)) return jsonError(400, error);
+
+        if (!topics.update(updated)) return jsonError(404, "Learning topic not found");
+        return crow::response(200, toJson(updated));
+    });
+
+    // DELETE /api/learning-topics/<id>  -> 204 on success, no body
+    CROW_ROUTE(app, "/api/learning-topics/<int>").methods("DELETE"_method)
+    ([&topics](int id) {
+        if (!topics.remove(id)) return jsonError(404, "Learning topic not found");
+        return crow::response(204);
+    });
+
+    // Educator Portal: assignments and session results (see educator_routes.cpp)
+    registerEducatorRoutes(app, assignments, results);
 
     // -------------------------------------------------------------------------
     // 3. Start the server
