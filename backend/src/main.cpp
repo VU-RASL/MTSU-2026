@@ -1,3 +1,5 @@
+// TODO: pick up with guards in handlers
+
 // =============================================================================
 // main.cpp — the "front desk" of the server
 // =============================================================================
@@ -60,6 +62,7 @@
 #include <iostream>
 #include <stdexcept>
 
+#include "auth.h"					  // authorization framework
 #include "crow.h"                     // the Crow web framework
 #include "crow/middlewares/cors.h"    // CORS support (explained in main below)
 #include "persona.h"                  // Persona, toJson(), applyJson()
@@ -139,6 +142,19 @@ crow::response jsonError(int status, const std::string& message) {
     return crow::response(status, body);
 }
 
+std::optional<crow::response> requireIdentity(const crow::request& req, bool educatorOnly) {
+    const auto user = currentUser(req);
+    if (!user) {
+        auto response = jsonError(401, "Login required");
+        response.set_header("WWW-Authenticate", "Bearer");
+        return response;
+    }
+    if (educatorOnly && !isEducatorRole(user->role)) {
+        return jsonError(403, "Educators only");
+    }
+    return std::nullopt;
+}
+
 }  // namespace
 
 int main() {
@@ -149,6 +165,7 @@ int main() {
     }
 
     try {
+        initializeAuth();
         checkSupabase();
     } catch (const std::exception& error) {
         std::cerr << error.what() << '\n';
@@ -174,6 +191,9 @@ int main() {
     app.exception_handler([](crow::response& response) {
         try {
             throw;
+        } catch (const AuthUnavailable&) {
+            response = jsonError(503, "Authentication service unavailable. Please try again.");
+            return;
         } catch (const std::exception& error) {
             std::cerr << "Request failed: " << error.what() << '\n';
         } catch (...) {
@@ -188,7 +208,7 @@ int main() {
     cors.global()                              // these rules apply to every route
         .origin("http://localhost:5173")       // allow Vite's default React dev port
         .methods("GET"_method, "POST"_method, "PUT"_method, "DELETE"_method)  // allowed methods
-        .headers("Content-Type");              // React may send this header (needed for JSON bodies)
+        .headers("Content-Type, Authorization");  // React may send this header (needed for JSON bodies)
 
     // -------------------------------------------------------------------------
     // 2. Create the store and add the sample persona
@@ -218,6 +238,9 @@ int main() {
     // -------------------------------------------------------------------------
     CROW_ROUTE(app, "/api/personas").methods("GET"_method)
     ([&store](const crow::request& req) {
+    
+    	if (auto error = requireIdentity(req, true)) return std::move(*error);
+    	
         // Read ?search=... from the URL. get() returns nullptr if it's not there.
         const char* search = req.url_params.get("search");
 
@@ -238,6 +261,9 @@ int main() {
     // -------------------------------------------------------------------------
     CROW_ROUTE(app, "/api/personas").methods("POST"_method)
     ([&store](const crow::request& req) {
+    
+    	if (auto error = requireIdentity(req, true)) return std::move(*error);
+
         auto body = crow::json::load(req.body);   // parse the raw text into JSON
         if (!body) return jsonError(400, "Invalid JSON");  // parsing failed
 
@@ -257,7 +283,10 @@ int main() {
     //   404  no persona with that id
     // -------------------------------------------------------------------------
     CROW_ROUTE(app, "/api/personas/<int>").methods("GET"_method)
-    ([&store](int id) {                           // id comes from the <int> in the URL
+    ([&store](const crow::request& req, int id) { // id comes from the <int> in the URL
+    
+    	if (auto error = requireIdentity(req, true)) return std::move(*error);
+
         auto p = store.get(id);                   // a std::optional: the persona, or nothing
         if (!p) return jsonError(404, "Persona not found");
         return crow::response(200, toJson(*p));   // *p takes the persona out of the optional
@@ -274,6 +303,9 @@ int main() {
     // -------------------------------------------------------------------------
     CROW_ROUTE(app, "/api/personas/<int>").methods("PUT"_method)
     ([&store](const crow::request& req, int id) {
+    
+    	if (auto error = requireIdentity(req, true)) return std::move(*error);
+
         auto existing = store.get(id);            // the current version
         if (!existing) return jsonError(404, "Persona not found");
 
@@ -299,7 +331,10 @@ int main() {
     //   404  no persona with that id
     // -------------------------------------------------------------------------
     CROW_ROUTE(app, "/api/personas/<int>").methods("DELETE"_method)
-    ([&store](int id) {
+    ([&store](const crow::request& req, int id) {
+        
+        if (auto error = requireIdentity(req, true)) return std::move(*error);
+
         if (!store.remove(id)) return jsonError(404, "Persona not found");
         return crow::response(204);
     });
@@ -311,7 +346,10 @@ int main() {
 
     // GET /api/learning-topics  -> all topics, in page order
     CROW_ROUTE(app, "/api/learning-topics").methods("GET"_method)
-    ([&topics] {
+    ([&topics](const crow::request& req) {
+    
+    	if (auto error = requireIdentity(req, false)) return std::move(*error);
+        
         std::vector<crow::json::wvalue> items;
         for (const auto& t : topics.list()) {
             items.push_back(toJson(t));
@@ -324,6 +362,8 @@ int main() {
     //   400  bad JSON, wrong type, or no title
     CROW_ROUTE(app, "/api/learning-topics").methods("POST"_method)
     ([&topics](const crow::request& req) {
+    
+    	if (auto error = requireIdentity(req, true)) return std::move(*error);
         auto body = crow::json::load(req.body);
         if (!body) return jsonError(400, "Invalid JSON");
 
@@ -336,7 +376,9 @@ int main() {
 
     // GET /api/learning-topics/<id>  -> one topic
     CROW_ROUTE(app, "/api/learning-topics/<int>").methods("GET"_method)
-    ([&topics](int id) {
+    ([&topics](const crow::request& req, int id) {
+    
+    	if (auto error = requireIdentity(req, false)) return std::move(*error);
         auto t = topics.get(id);
         if (!t) return jsonError(404, "Learning topic not found");
         return crow::response(200, toJson(*t));
@@ -345,6 +387,8 @@ int main() {
     // PUT /api/learning-topics/<id>  -> update; only the fields sent change
     CROW_ROUTE(app, "/api/learning-topics/<int>").methods("PUT"_method)
     ([&topics](const crow::request& req, int id) {
+    
+    	if (auto error = requireIdentity(req, true)) return std::move(*error);
         auto existing = topics.get(id);
         if (!existing) return jsonError(404, "Learning topic not found");
 
@@ -361,11 +405,32 @@ int main() {
 
     // DELETE /api/learning-topics/<id>  -> 204 on success, no body
     CROW_ROUTE(app, "/api/learning-topics/<int>").methods("DELETE"_method)
-    ([&topics](int id) {
+    ([&topics](const crow::request& req, int id) {
+    
+    	if (auto error = requireIdentity(req, true)) return std::move(*error);
         if (!topics.remove(id)) return jsonError(404, "Learning topic not found");
         return crow::response(204);
     });
 
+	CROW_ROUTE(app, "/api/auth/me").methods("GET"_method)
+    ([](const crow::request& req) {
+        const auto user = currentUser(req);
+        if (!user) {
+            auto response = jsonError(401, "Login required");
+            response.set_header("WWW-Authenticate", "Bearer");
+            return response;
+        }
+
+        crow::json::wvalue body;
+        body["id"] = user->id;
+        body["role"] = user->role == Role::Student ? "student" :
+                       user->role == Role::Educator ? "educator" : "admin";
+
+        auto response = crow::response(200, body);
+        response.set_header("Cache-Control", "no-store");
+        return response;
+    });
+	
     // Educator Portal: assignments and session results (see educator_routes.cpp)
     registerEducatorRoutes(app, assignments, results);
 
