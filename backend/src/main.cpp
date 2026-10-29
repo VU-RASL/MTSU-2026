@@ -67,6 +67,8 @@
 #include "crow/middlewares/cors.h"    // CORS support (explained in main below)
 #include "persona.h"                  // Persona, toJson(), applyJson()
 #include "persona_store.h"            // PersonaStore
+#include "scenario.h"
+#include "scenario_store.h"           // ScenarioStore
 #include "learning_topic.h"           // LearningTopic, toJson(), applyJson()
 #include "learning_topic_store.h"     // LearningTopicStore
 #include "assignment_store.h"         // AssignmentStore (Educator Portal)
@@ -98,6 +100,7 @@ void checkSupabase() {
     std::string url = std::string(baseUrl) + "/rest/v1/personas?select=id&limit=1";
     std::string keyHeader = std::string("apikey: ") + secretKey;
     std::string body;
+
 
     curl_slist* headers = nullptr;
     headers = curl_slist_append(headers, keyHeader.c_str());
@@ -214,6 +217,7 @@ int main() {
     // 2. Create the store and add the sample persona
     // -------------------------------------------------------------------------
     PersonaStore store;
+    ScenarioStore scenarios;  // the Scenario page's scenarios (Supabase table: scenarios)
     LearningTopicStore topics;  // the Learning page's topics (Supabase table: learning_topics)
     AssignmentStore assignments;     // Educator Portal (Supabase table: assignments)
     SessionResultStore results;      // Educator Portal (Supabase table: session_results)
@@ -430,7 +434,100 @@ int main() {
         response.set_header("Cache-Control", "no-store");
         return response;
     });
+<<<<<<< HEAD
 	
+=======
+
+    // =========================================================================
+    // Scenarios
+    // These routes allow educators to create, view, update, and delete scenarios.
+    // =========================================================================
+
+    // GET /api/scenarios -> list all scenarios, optionally searching by title
+    CROW_ROUTE(app, "/api/scenarios").methods("GET"_method)
+    ([&scenarios](const crow::request& req) {
+        const char* search = req.url_params.get("search");
+
+        std::vector<crow::json::wvalue> items;
+
+        for (const auto& scenario : scenarios.list(search ? search : "")) {
+            items.push_back(toJson(scenario));
+        }
+
+        return crow::response(200, crow::json::wvalue(std::move(items)));
+    });
+
+    // POST /api/scenarios -> create a new scenario
+    CROW_ROUTE(app, "/api/scenarios").methods("POST"_method)
+    ([&scenarios](const crow::request& req) {
+        auto body = crow::json::load(req.body);
+
+        if (!body) {
+            return jsonError(400, "Invalid JSON");
+        }
+
+        Scenario scenario;
+        std::string error;
+
+        if (!applyJson(body, scenario, error)) {
+            return jsonError(400, error);
+        }
+
+        return crow::response(201, toJson(scenarios.create(scenario)));
+    });
+
+    // GET /api/scenarios/<id> -> retrieve one scenario
+    CROW_ROUTE(app, "/api/scenarios/<int>").methods("GET"_method)
+    ([&scenarios](int id) {
+        auto scenario = scenarios.get(id);
+
+        if (!scenario) {
+            return jsonError(404, "Scenario not found");
+        }
+
+        return crow::response(200, toJson(*scenario));
+    });
+
+    // PUT /api/scenarios/<id> -> update an existing scenario
+    CROW_ROUTE(app, "/api/scenarios/<int>").methods("PUT"_method)
+    ([&scenarios](const crow::request& req, int id) {
+        auto existing = scenarios.get(id);
+
+        if (!existing) {
+            return jsonError(404, "Scenario not found");
+        }
+
+        auto body = crow::json::load(req.body);
+
+        if (!body) {
+            return jsonError(400, "Invalid JSON");
+        }
+
+        Scenario updated = *existing;
+        std::string error;
+
+        if (!applyJson(body, updated, error)) {
+            return jsonError(400, error);
+        }
+
+        if (!scenarios.update(updated)) {
+            return jsonError(404, "Scenario not found");
+        }
+
+        return crow::response(200, toJson(updated));
+    });
+
+    // DELETE /api/scenarios/<id> -> delete a scenario
+    CROW_ROUTE(app, "/api/scenarios/<int>").methods("DELETE"_method)
+    ([&scenarios](int id) {
+        if (!scenarios.remove(id)) {
+            return jsonError(404, "Scenario not found");
+        }
+
+        return crow::response(204);
+    });
+
+>>>>>>> d744353 (Update scenario backend and Supabase integration)
     // Educator Portal: assignments and session results (see educator_routes.cpp)
     registerEducatorRoutes(app, assignments, results);
 

@@ -12,6 +12,8 @@ add_executable(server
     src/main.cpp
     src/persona.cpp
     src/persona_store.cpp
+    src/scenario.cpp
+    src/scenario_store.cpp
     src/supabase_client.cpp
     src/learning_topic.cpp
     src/learning_topic_store.cpp

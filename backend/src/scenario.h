@@ -29,6 +29,9 @@ struct Scenario {
     std::string instructions;      // additional instructions for setting up or conducting the simulation.
     std::string patientSituation;  // describes the clinical circumstances the student encounters, separate from patient's identity & personality.
     std::vector<std::string> requiredTasks;
+
+    // Estimated time to complete the simulation, in minutes
+    int estimatedTime = 0; 
 };
 
 // C++ Scenario object -> JSON (what we send to React).

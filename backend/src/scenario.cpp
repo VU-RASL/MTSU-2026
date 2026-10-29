@@ -69,6 +69,7 @@ crow::json::wvalue toJson(const Scenario& scenario) {
 
     output["id"] = scenario.id; 
     output["createdAt"] = scenario.createdAt;
+    output["estimatedTime"] = scenario.estimatedTime;
 
     // Convert all single-value fields into JSON properties.
     for (const auto& [path, member] : kStringFields) {
@@ -105,6 +106,24 @@ bool applyJson(const crow::json::rvalue& body, Scenario& scenario, std::string& 
             return false;
         }
         scenario.*member = std::string(value->s());
+    }
+
+    // Read estimatedTime as a number of minutes.
+    const auto* estimatedTime = find(body, { "estimatedTime" });
+
+    if (estimatedTime) {
+        if (estimatedTime->t() != crow::json::type::Number) {
+            error = "'estimatedTime' must be a number";
+            return false;
+        }
+
+        double value = estimatedTime->d();
+
+        if (value < 0 || value != static_cast<int>(value)) {
+            error = "'estimatedTime' must be a non-negative whole number";
+            return false;
+        }
+        scenario.estimatedTime = static_cast<int>(value);
     }
 
     for (const auto& [path, member] : kListFields) {

@@ -1,17 +1,24 @@
 #pragma once
 
+#include <optional>  // std::optional, for "a persona, or nothing"
+#include <string>
 #include <vector>
+#include <mutex>
+#include <map>
 #include "scenario.h" 
 
  /* 
  This class manages the scenarios created by educators. 
 
- The store is responsible for creating, retrieving, updating, 
- and deleting scenarios. It does not handle HTTP requests directly.
+ The store is responsible for creating, retrieving, updating, and deleting scenarios. 
+ It communicates with Supabase, while main.cpp handles HTTP requests.
  */
 
  class ScenarioStore {
 public:
+    // Reads the Supabase connection settings from environment variables.
+     ScenarioStore();
+
     // Returns a list of all scenarios, optionally filtered by a case-insensitive title search.
     std::vector<Scenario> list(const std::string& search = "") const;
     
@@ -28,8 +35,14 @@ public:
     bool remove(int id);
         
 private:
-    mutable std::mutex mutex_;  // Mutex to ensure thread safety for concurrent access.
-    std::map<int, Scenario> scenarios_;  // Map of scenario ID to Scenario object
-    int nextId_ = 1;  // Next available ID for a new scenario.  
+    // Supabase project URL and server-side secret key. 
+    std::string baseUrl_; 
+    std::string secretKey_; 
+    
+    // Sends an HTTP request to the Supabase REST API. 
+    std::string request(
+        const std::string& method, 
+        const std::string& path, 
+        const std::string& body = "" 
+    ) const; 
 };
-
