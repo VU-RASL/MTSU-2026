@@ -22,6 +22,8 @@
 //   400 bad input, 401 not logged in, 403 not allowed, 404 not found.
 // =============================================================================
 
+// TODO: replace the above comment block where appropriate.
+
 #include "educator_routes.h"
 
 #include <ctime>
@@ -30,6 +32,7 @@
 #include <vector>
 
 #include "assignment.h"
+#include "assignment_access.h"
 #include "assignment_store.h"
 #include "auth.h"
 #include "session_result.h"
@@ -37,17 +40,13 @@
 
 namespace {
 
+// return errors in the same JSON format as the other routes
 crow::response jsonError(int status, const std::string& message) {
     crow::json::wvalue body;
     body["error"] = message;
-    return crow::response(status, body);
-}
-
-bool isEducator(const CurrentUser& user) { return isEducatorRole(user.role); }
-
-// Educators see everything; students only what belongs to them.
-bool canAccess(const CurrentUser& user, const std::string& studentId) {
-    return isEducator(user) || user.id == studentId;
+    auto response = crow::response(status, body);
+    if (status == 401) response.set_header("WWW-Authenticate", "Bearer");
+    return response;
 }
 
 // Current time in UTC, e.g. "2026-10-26T16:00:00Z"
@@ -60,6 +59,7 @@ std::string nowUtc() {
     return buf;
 }
 
+// turn a list of records into a JSON response
 template <typename T>
 crow::response jsonList(const std::vector<T>& items) {
     std::vector<crow::json::wvalue> out;
@@ -71,85 +71,94 @@ crow::response jsonList(const std::vector<T>& items) {
 
 void registerEducatorRoutes(EducatorApp& app, AssignmentStore& assignments, SessionResultStore& results) {
 
-    // -------------------------------------------------------------------------
-    // GET /api/assignments?studentId=3&status=assigned&scenarioId=2
-    // All filters optional. Students always get only their own.
-    // -------------------------------------------------------------------------
     CROW_ROUTE(app, "/api/assignments").methods("GET"_method)
     ([&assignments](const crow::request& req) {
         auto user = currentUser(req);
         if (!user) return jsonError(401, "Login required");
 
         AssignmentFilter filter;
-        if (const char* s = req.url_params.get("studentId")) filter.studentId = s;
-        if (const char* s = req.url_params.get("status")) {
-            filter.status = s;
+        if (const char* value = req.url_params.get("studentId")) {
+            filter.studentId = value;
+        }
+        
+        if (const char* value = req.url_params.get("status")) {
+            filter.status = value;
             if (!isValidAssignmentStatus(filter.status)) {
                 return jsonError(400, "'status' must be assigned, in_progress, completed or reviewed");
             }
         }
-        if (const char* s = req.url_params.get("scenarioId")) {
+
+        if (const char* value = req.url_params.get("scenarioId")) {
             try {
                 size_t used = 0;
-                filter.scenarioId = std::stoi(s, &used);
-                if (used != std::string(s).size() || filter.scenarioId <= 0) throw std::invalid_argument("");
+                filter.scenarioId = std::stoi(value, &used);
+                if (used != std::string(value).size() || filter.scenarioId <= 0) throw std::invalid_argument("");
             } catch (...) {
                 return jsonError(400, "'scenarioId' must be a positive whole number");
             }
         }
-        if (!isEducator(*user)) filter.studentId = user->id;  // students: own only
+
+        // a student cannot request another student's assignments
+        // an educator cannot choose a different assignment owner
+        if (user->role == Role::Student) {
+            filter.studentId = user->id;
+        } else if (user->role == Role::Educator) {
+            filter.assignedBy = user->id;
+        } else if (user->role != Role::Admin) {
+            return jsonError(403, "Access denied");
+        }
 
         return jsonList(assignments.list(filter));
     });
 
-    // -------------------------------------------------------------------------
-    // POST /api/assignments   { "scenarioId": 2, "studentId": "3" }
-    // Educators only. Starts as "assigned"; assignedBy = the educator.
-    // -------------------------------------------------------------------------
+    // create an assignment and record the verified caller as its owner
     CROW_ROUTE(app, "/api/assignments").methods("POST"_method)
     ([&assignments](const crow::request& req) {
-        auto user = currentUser(req);
+        const auto user = currentUser(req);
         if (!user) return jsonError(401, "Login required");
-        if (!isEducator(*user)) return jsonError(403, "Educators only");
+        if (!isEducatorRole(user->role)) return jsonError(403, "Educators only");
 
-        auto body = crow::json::load(req.body);
+        const auto body = crow::json::load(req.body);
         if (!body) return jsonError(400, "Invalid JSON");
 
-        Assignment a;
+        Assignment assignment;
         std::string error;
-        if (!applyCreateJson(body, a, error)) return jsonError(400, error);
-        if (lookupRole(a.studentId) != Role::Student) {
+        if (!applyCreateJson(body, assignment, error)) return jsonError(400, error);
+        if (lookupRole(assignment.studentId) != Role::Student) {
             return jsonError(400, "'studentId' must be the id of a student in profiles");
         }
-        a.assignedBy = user->id;
 
-        return crow::response(201, toJson(assignments.create(a)));
+        // never accept the owner ID from the request body
+        assignment.assignedBy = user->id;
+        return crow::response(201, toJson(assignments.create(assignment)));
     });
 
-    // -------------------------------------------------------------------------
-    // GET /api/assignments/<id>
-    // -------------------------------------------------------------------------
+    // get one assignment after checking the caller's access
     CROW_ROUTE(app, "/api/assignments/<int>").methods("GET"_method)
     ([&assignments](const crow::request& req, int id) {
-        auto user = currentUser(req);
+        
+        const auto user = currentUser(req);
         if (!user) return jsonError(401, "Login required");
 
-        auto a = assignments.get(id);
-        if (!a) return jsonError(404, "Assignment not found");
-        if (!canAccess(*user, a->studentId)) return jsonError(403, "Not your assignment");
-        return crow::response(200, toJson(*a));
+        const auto assignment = assignments.get(id);
+        if (!assignment) return jsonError(404, "Assignment not found");
+        if (!canAccessAssignment(*user, *assignment)) return jsonError(403, "Not your assignment");
+        return crow::response(200, toJson(*assignment));
     });
 
-    // -------------------------------------------------------------------------
-    // PUT /api/assignments/<id>   { "status": "in_progress" }
-    // Educators: any valid status. Students: only start their own.
-    // -------------------------------------------------------------------------
+    // change the status of an authorized assignment
     CROW_ROUTE(app, "/api/assignments/<int>").methods("PUT"_method)
     ([&assignments](const crow::request& req, int id) {
-        auto user = currentUser(req);
+        const auto user = currentUser(req);
         if (!user) return jsonError(401, "Login required");
 
-        auto body = crow::json::load(req.body);
+        auto assignment = assignments.get(id);
+        if (!assignment) return jsonError(404, "Assignment not found");
+        if (!canAccessAssignment(*user, *assignment)) {
+            return jsonError(403, "Not your assignment");
+        }
+
+        const auto body = crow::json::load(req.body);
         if (!body) return jsonError(400, "Invalid JSON");
         if (body.t() != crow::json::type::Object || !body.has("status") ||
             body["status"].t() != crow::json::type::String) {
@@ -160,113 +169,125 @@ void registerEducatorRoutes(EducatorApp& app, AssignmentStore& assignments, Sess
             return jsonError(400, "'status' must be assigned, in_progress, completed or reviewed");
         }
 
-        auto a = assignments.get(id);
-        if (!a) return jsonError(404, "Assignment not found");
-        if (!canAccess(*user, a->studentId)) return jsonError(403, "Not your assignment");
-        if (!isEducator(*user) && status != "in_progress") {
+        // students can only start their own assignments
+        if (user->role == Role::Student && status != "in_progress") {
             return jsonError(403, "Students can only set status to in_progress");
         }
 
         if (!assignments.setStatus(id, status)) return jsonError(404, "Assignment not found");
-        a->status = status;
-        return crow::response(200, toJson(*a));
+        assignment->status = status;
+        return crow::response(200, toJson(*assignment));
     });
 
-    // -------------------------------------------------------------------------
-    // DELETE /api/assignments/<id>   (its results are deleted too)
-    // -------------------------------------------------------------------------
+    // only the owning educator or an admin can request deletion
+    // existing db constraints still protect retained results
     CROW_ROUTE(app, "/api/assignments/<int>").methods("DELETE"_method)
     ([&assignments](const crow::request& req, int id) {
-        auto user = currentUser(req);
+        
+        const auto user = currentUser(req);
         if (!user) return jsonError(401, "Login required");
-        if (!isEducator(*user)) return jsonError(403, "Educators only");
-
+        if (!isEducatorRole(user->role)) return jsonError(403, "Educators only");
+        
+        const auto assignment = assignments.get(id);
+        if (!assignment) return jsonError(404, "Assignment not found");
+        if (!canManageAssignment(*user, *assignment)) return jsonError(403, "Not your assignment");
         if (!assignments.remove(id)) return jsonError(404, "Assignment not found");
         return crow::response(204);
     });
 
-    // -------------------------------------------------------------------------
-    // GET /api/assignments/<id>/results   every attempt, oldest first
-    // -------------------------------------------------------------------------
+    // result lists inherit access from their assignment
     CROW_ROUTE(app, "/api/assignments/<int>/results").methods("GET"_method)
     ([&assignments, &results](const crow::request& req, int id) {
-        auto user = currentUser(req);
+        const auto user = currentUser(req);
         if (!user) return jsonError(401, "Login required");
 
-        auto a = assignments.get(id);
-        if (!a) return jsonError(404, "Assignment not found");
-        if (!canAccess(*user, a->studentId)) return jsonError(403, "Not your assignment");
+        const auto assignment = assignments.get(id);
+        if (!assignment) return jsonError(404, "Assignment not found");
+        if (!canAccessAssignment(*user, *assignment)) return jsonError(403, "Not your assignment");
 
         return jsonList(results.listForAssignment(id));
     });
 
-    // -------------------------------------------------------------------------
-    // POST /api/assignments/<id>/results
-    //   { "transcript": [ { "role": "student", "text": "..." }, ... ],
-    //     "autoScore": { ... } }                      // optional
-    // Saves one attempt and marks the assignment "completed".
-    // Called by the session/RTC code when a conversation ends.
-    // -------------------------------------------------------------------------
+    // keep the existing manual result submission route
+    // trusted Realtime left for next time
+    // TODO: implement trusted Realtime finalization
     CROW_ROUTE(app, "/api/assignments/<int>/results").methods("POST"_method)
     ([&assignments, &results](const crow::request& req, int id) {
-        auto user = currentUser(req);
+        const auto user = currentUser(req);
         if (!user) return jsonError(401, "Login required");
 
-        auto a = assignments.get(id);
-        if (!a) return jsonError(404, "Assignment not found");
-        if (!canAccess(*user, a->studentId)) return jsonError(403, "Not your assignment");
+        const auto assignment = assignments.get(id);
+        if (!assignment) return jsonError(404, "Assignment not found");
+        if (!canAccessAssignment(*user, *assignment)) return jsonError(403, "Not your assignment");
 
-        auto body = crow::json::load(req.body);
+        const auto body = crow::json::load(req.body);
         if (!body) return jsonError(400, "Invalid JSON");
 
-        SessionResult r;
+        SessionResult result;
         std::string error;
-        if (!applySubmitJson(body, r, error)) return jsonError(400, error);
-        r.assignmentId = id;
-        r.studentId = a->studentId;  // always the assignment's student
+        if (!applySubmitJson(body, result, error)) return jsonError(400, error);
+        
 
-        SessionResult saved = results.create(r);
+        // the assignment decides which student owns this result
+        result.assignmentId = id;
+        result.studentId = assignment->studentId;
+
+        const auto saved = results.create(result);
         assignments.setStatus(id, "completed");
         return crow::response(201, toJson(saved));
     });
 
-    // -------------------------------------------------------------------------
-    // GET /api/results/<id>
-    // -------------------------------------------------------------------------
+    // a direct result ID does not bypass assignment ownership
     CROW_ROUTE(app, "/api/results/<int>").methods("GET"_method)
-    ([&results](const crow::request& req, int id) {
-        auto user = currentUser(req);
+    ([&assignments, &results](const crow::request& req, int id) {
+        const auto user = currentUser(req);
         if (!user) return jsonError(401, "Login required");
 
-        auto r = results.get(id);
-        if (!r) return jsonError(404, "Result not found");
-        if (!canAccess(*user, r->studentId)) return jsonError(403, "Not your result");
-        return crow::response(200, toJson(*r));
+        const auto result = results.get(id);
+        if (!result) return jsonError(404, "Result not found");
+        
+        const auto assignment = assignments.get(result->assignmentId);
+        if (!assignment || result->studentId != assignment->studentId) {
+            return jsonError(404, "Result not found");
+        }
+        if (!canAccessAssignment(*user, *assignment)) {
+            return jsonError(403, "Not your result");
+        }
+        
+        return crow::response(200, toJson(*result));
     });
 
-    // -------------------------------------------------------------------------
-    // PUT /api/results/<id>/review   { "educatorScore": 90, "educatorFeedback": "..." }
-    // Educators only. Records who reviewed and when; assignment -> "reviewed".
-    // -------------------------------------------------------------------------
+    // only the owning educator or an admin can review a result
     CROW_ROUTE(app, "/api/results/<int>/review").methods("PUT"_method)
     ([&assignments, &results](const crow::request& req, int id) {
-        auto user = currentUser(req);
+        const auto user = currentUser(req);
         if (!user) return jsonError(401, "Login required");
-        if (!isEducator(*user)) return jsonError(403, "Educators only");
+        if (!isEducatorRole(user->role)) return jsonError(403, "Educators only");
 
-        auto r = results.get(id);
-        if (!r) return jsonError(404, "Result not found");
+        auto result = results.get(id);
+        if (!result) return jsonError(404, "Result not found");
 
-        auto body = crow::json::load(req.body);
+        const auto assignment = assignments.get(result->assignmentId);
+        if (!assignment || result->studentId != assignment->studentId) {
+            return jsonError(404, "Result not found");
+        }
+        if (!canManageAssignment(*user, *assignment)) {
+            return jsonError(403, "Not your result");
+        }
+
+        const auto body = crow::json::load(req.body);
         if (!body) return jsonError(400, "Invalid JSON");
 
         std::string error;
-        if (!applyReviewJson(body, *r, error)) return jsonError(400, error);
-        r->reviewedBy = user->id;
-        r->reviewedAt = nowUtc();
+        if (!applyReviewJson(body, *result, error)) return jsonError(400, error);
+        
 
-        if (!results.saveReview(*r)) return jsonError(404, "Result not found");
-        assignments.setStatus(r->assignmentId, "reviewed");
-        return crow::response(200, toJson(*r));
+        // the reviewer is always the verified caller
+        result->reviewedBy = user->id;
+        result->reviewedAt = nowUtc();
+
+        if (!results.saveReview(*result)) return jsonError(404, "Result not found");
+        assignments.setStatus(result->assignmentId, "reviewed");
+        return crow::response(200, toJson(*result));
     });
 }

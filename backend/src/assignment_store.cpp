@@ -46,7 +46,11 @@ Assignment fromRow(const crow::json::rvalue& row) {
 }  // namespace
 
 std::vector<Assignment> AssignmentStore::list(const AssignmentFilter& filter) const {
+    
     std::string path = std::string("assignments?") + kColumns + "&order=created_at.desc,id.desc";
+    
+    // restrict db query to the verified educator's assignments
+    if (!filter.assignedBy.empty()) path += "&assigned_by=eq." + SupabaseClient::encode(filter.assignedBy);
     if (!filter.studentId.empty()) path += "&student_id=eq." + SupabaseClient::encode(filter.studentId);
     if (!filter.status.empty())    path += "&status=eq." + SupabaseClient::encode(filter.status);
     if (filter.scenarioId > 0)     path += "&scenario_id=eq." + std::to_string(filter.scenarioId);
