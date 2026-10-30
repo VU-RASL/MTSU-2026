@@ -9,8 +9,9 @@
 // This store sends HTTP requests to the Supabase REST API. That means scenarios 
 // remain saved when the server restarts. 
 // 
-// The database stores scenario fields in separate columns, including 
-// estimatedTime, learningObjectives, and requiredTasks. 
+// The database stores scenario fields in separate snake_case columns
+// (created_at, learning_objectives, required_tasks, estimated_time, ...).
+// This file maps them to the camelCase fields used by Scenario and the JSON API.
 // 
 // =============================================================================
 
@@ -21,10 +22,10 @@
 #include <memory>
 #include <stdexcept>
 #include <string>
+#include <cmath>
 #include <limits>
 #include <algorithm>
 #include <cctype>
-#include <string>
 #include <utility> 
 
 namespace { 
@@ -50,32 +51,36 @@ std::string toLower(std::string text) {
     return text; 
 }
 
+// Columns requested from Supabase, kept in one place.
+const char* const kSelect =
+    "id,created_at,title,summary,setting,difficulty,learning_objectives,"
+    "instructions,patient_situation,required_tasks,estimated_time";
+
 // Converts a Scenario into the JSON object expected by the scenarios table. 
-std::string toDatabaseBody(const Scenario& s) { 
-    
-    crow::json::wvalue row; 
-    row["title"] = s.title; 
-    row["summary"] = s.summary; 
-    row["setting"] = s.setting; 
-    row["difficulty"] = s.difficulty; 
-    row["instructions"] = s.instructions; 
-    row["patientSituation"] = s.patientSituation; 
-    row["estimatedTime"] = s.estimatedTime;
+std::string toDatabaseBody(const Scenario& s) {
+    crow::json::wvalue row;
+    row["title"] = s.title;
+    row["summary"] = s.summary;
+    row["setting"] = s.setting;
+    row["difficulty"] = s.difficulty;
+    row["instructions"] = s.instructions;
+    row["patient_situation"] = s.patientSituation;
+    row["estimated_time"] = s.estimatedTime;
 
-    // Store the vectors as JSON arrays. 
-    crow::json::wvalue::list objectives; 
-    for (const auto& objective : s.learningObjectives) { 
-        objectives.emplace_back(objective); 
-    } 
-    row["learningObjectives"] = std::move(objectives); 
-    
-    crow::json::wvalue::list tasks; 
-    for (const auto& task : s.requiredTasks) { 
-        tasks.emplace_back(task); 
-    } 
-    row["requiredTasks"] = std::move(tasks); 
+    // Store the vectors as JSON arrays.
+    crow::json::wvalue::list objectives;
+    for (const auto& objective : s.learningObjectives) {
+        objectives.emplace_back(objective);
+    }
+    row["learning_objectives"] = std::move(objectives);
 
-    return row.dump(); 
+    crow::json::wvalue::list tasks;
+    for (const auto& task : s.requiredTasks) {
+        tasks.emplace_back(task);
+    }
+    row["required_tasks"] = std::move(tasks);
+
+    return row.dump();
 }
 
 // Parses a Supabase response containing a list of database rows. 
@@ -88,107 +93,88 @@ crow::json::rvalue parseRows(const std::string& response) {
     return rows; 
 }
 
-// Converts a database row into a Scenario object. 
-Scenario fromDatabaseRow(const crow::json::rvalue& row) { 
-    if (row.t() != crow::json::type::Object || 
-        !row.has("id") || 
-        !row.has("title") || 
-        !row.has("createdAt")) { 
-        throw std::runtime_error("Supabase returned an incomplete scenario"); 
-    } 
+// Reads an optional JSON array of strings from a database row.
+std::vector<std::string> readStringList(const crow::json::rvalue& row, const char* key) {
+    std::vector<std::string> items;
 
-    if (row["id"].t() != crow::json::type::Number || 
-    row["title"].t() != crow::json::type::String) { 
-    throw std::runtime_error("Supabase returned invalid scenario fields"); 
-}
-
-const auto databaseId = row["id"].i();
-
-if (databaseId <= 0 || 
-    databaseId > std::numeric_limits<int>::max()) { 
-    throw std::runtime_error( 
-        "Supabase returned an invalid scenario ID" 
-    ); 
-}
-
-Scenario scenario; 
-scenario.id = static_cast<int>(databaseId); 
-scenario.title = std::string(row["title"].s());
-
-// Read optional text fields. 
-auto readString = [&row](const char* key) -> std::string { 
-    if (!row.has(key) || 
-        row[key].t() == crow::json::type::Null) { 
-        return ""; 
-    } 
-    
-    if (row[key].t() != crow::json::type::String) { 
-        throw std::runtime_error( 
-            std::string("Invalid scenario field: ") + key 
-        ); 
-    } 
-    return std::string(row[key].s());
-};
-
-scenario.summary = readString("summary"); 
-scenario.setting = readString("setting"); 
-scenario.difficulty = readString("difficulty"); 
-scenario.instructions = readString("instructions"); 
-scenario.patientSituation = readString("patientSituation"); 
-scenario.createdAt = readString("createdAt");
-
-// Read the estimated time, stored as a number of minutes. 
-if (row.has("estimatedTime") && 
-    row["estimatedTime"].t() != crow::json::type::Null) { 
-    if (row["estimatedTime"].t() != crow::json::type::Number) { 
-        throw std::runtime_error("Supabase returned an invalid estimatedTime"); 
-    } 
-
-    const double value = row["estimatedTime"].d();
-
-    if (value < 0 || 
-        value > std::numeric_limits<int>::max() || 
-        value != static_cast<int>(value)) { 
-        throw std::runtime_error("Supabase returned an invalid estimatedTime"); 
-    } 
-    scenario.estimatedTime = static_cast<int>(value); 
-}
-
-// Read learningObjectives from its JSON array. 
-if (row.has("learningObjectives") && 
-    row["learningObjectives"].t() != crow::json::type::Null) { 
-    if (row["learningObjectives"].t() != crow::json::type::List) { 
-        throw std::runtime_error("Supabase returned invalid learningObjectives"); 
-    } 
-
-    for (const auto& item : row["learningObjectives"]) { 
-        if (item.t() != crow::json::type::String) { 
-            throw std::runtime_error("A learning objective must be a string"); 
-        }
-        scenario.learningObjectives.push_back(
-            std::string(item.s())
-        );
+    if (!row.has(key) || row[key].t() == crow::json::type::Null) {
+        return items;
     }
+    if (row[key].t() != crow::json::type::List) {
+        throw std::runtime_error(std::string("Supabase returned invalid ") + key);
+    }
+
+    for (const auto& item : row[key]) {
+        if (item.t() != crow::json::type::String) {
+            throw std::runtime_error(std::string("Every item in ") + key + " must be a string");
+        }
+        items.push_back(std::string(item.s()));
+    }
+    return items;
 }
 
-// Read requiredTasks from its JSON array.
-if (row.has("requiredTasks") && 
-    row["requiredTasks"].t() != crow::json::type::Null) { 
-        if (row["requiredTasks"].t() != crow::json::type::List) { 
-            throw std::runtime_error("Supabase returned invalid requiredTasks"); 
-        } 
-
-        for (const auto& item : row["requiredTasks"]) { 
-            if (item.t() != crow::json::type::String) { 
-                throw std::runtime_error("A required task must be a string"); 
-            }
-
-            scenario.requiredTasks.push_back(
-                std::string(item.s())
-            );
-        }
+// Converts a database row into a Scenario object.
+Scenario fromDatabaseRow(const crow::json::rvalue& row) {
+    if (row.t() != crow::json::type::Object ||
+        !row.has("id") ||
+        !row.has("title") ||
+        !row.has("created_at")) {
+        throw std::runtime_error("Supabase returned an incomplete scenario");
     }
-    
+
+    if (row["id"].t() != crow::json::type::Number ||
+        row["title"].t() != crow::json::type::String) {
+        throw std::runtime_error("Supabase returned invalid scenario fields");
+    }
+
+    const auto databaseId = row["id"].i();
+    if (databaseId <= 0 || databaseId > std::numeric_limits<int>::max()) {
+        throw std::runtime_error("Supabase returned an invalid scenario ID");
+    }
+
+    Scenario scenario;
+    scenario.id = static_cast<int>(databaseId);
+    scenario.title = std::string(row["title"].s());
+
+    // Read optional text fields.
+    auto readString = [&row](const char* key) -> std::string {
+        if (!row.has(key) || row[key].t() == crow::json::type::Null) {
+            return "";
+        }
+        if (row[key].t() != crow::json::type::String) {
+            throw std::runtime_error(std::string("Invalid scenario field: ") + key);
+        }
+        return std::string(row[key].s());
+    };
+
+    scenario.summary = readString("summary");
+    scenario.setting = readString("setting");
+    scenario.difficulty = readString("difficulty");
+    scenario.instructions = readString("instructions");
+    scenario.patientSituation = readString("patient_situation");
+    scenario.createdAt = readString("created_at");
+
+    // Read the estimated time, stored as a number of minutes.
+    if (row.has("estimated_time") &&
+        row["estimated_time"].t() != crow::json::type::Null) {
+        if (row["estimated_time"].t() != crow::json::type::Number) {
+            throw std::runtime_error("Supabase returned an invalid estimated_time");
+        }
+
+        const double value = row["estimated_time"].d();
+
+        if (!std::isfinite(value) ||
+            value < 0 ||
+            value > std::numeric_limits<int>::max() ||
+            value != std::floor(value)) {
+            throw std::runtime_error("Supabase returned an invalid estimated_time");
+        }
+        scenario.estimatedTime = static_cast<int>(value);
+    }
+
+    scenario.learningObjectives = readStringList(row, "learning_objectives");
+    scenario.requiredTasks = readStringList(row, "required_tasks");
+
     return scenario;
 }
 } // namespace
@@ -315,16 +301,14 @@ std::optional<Scenario> ScenarioStore::get(int id) const {
     if (id <= 0) { 
         return std::nullopt;
     }
-
+    
     const auto rows = parseRows(
         request(
-            "GET", 
+            "GET",
             "scenarios?id=eq." + std::to_string(id) +
-            "&select=id,createdAt,title,summary,setting,difficulty,"
-            "learningObjectives,instructions,patientSituation,"
-            "requiredTasks,estimatedTime"
+            "&select=" + kSelect
         )
-    ); 
+    );
 
     if (rows.size() == 0) { 
         return std::nullopt; 
@@ -344,12 +328,10 @@ std::vector<Scenario> ScenarioStore::list(const std::string& search) const {
     int lastId = 0; 
 
     while (true) { 
-        const auto rows = parseRows(request("GET",
-                    "scenarios?select=id,createdAt,title,"
-                    "summary,setting,difficulty,learningObjectives,"
-                    "instructions,patientSituation,requiredTasks,"
-                    "estimatedTime&order=id.asc&limit=500&id=gt." +
-                    std::to_string(lastId))); 
+        const auto rows = parseRows(request(
+            "GET",
+            "scenarios?select=" + std::string(kSelect) +
+            "&order=id.asc&limit=500&id=gt." + std::to_string(lastId))); 
 
         if (rows.size() == 0) { 
             break; 
