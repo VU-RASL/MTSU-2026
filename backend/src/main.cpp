@@ -100,7 +100,7 @@ void checkSupabase() {
     std::string url = std::string(baseUrl) + "/rest/v1/personas?select=id&limit=1";
     std::string keyHeader = std::string("apikey: ") + secretKey;
     std::string body;
-
+    
 
     curl_slist* headers = nullptr;
     headers = curl_slist_append(headers, keyHeader.c_str());
@@ -434,9 +434,6 @@ int main() {
         response.set_header("Cache-Control", "no-store");
         return response;
     });
-<<<<<<< HEAD
-	
-=======
 
     // =========================================================================
     // Scenarios
@@ -446,44 +443,39 @@ int main() {
     // GET /api/scenarios -> list all scenarios, optionally searching by title
     CROW_ROUTE(app, "/api/scenarios").methods("GET"_method)
     ([&scenarios](const crow::request& req) {
+        if (auto denied = requireIdentity(req, false)) return *denied;
+
         const char* search = req.url_params.get("search");
 
         std::vector<crow::json::wvalue> items;
-
         for (const auto& scenario : scenarios.list(search ? search : "")) {
             items.push_back(toJson(scenario));
         }
-
         return crow::response(200, crow::json::wvalue(std::move(items)));
     });
 
     // POST /api/scenarios -> create a new scenario
     CROW_ROUTE(app, "/api/scenarios").methods("POST"_method)
     ([&scenarios](const crow::request& req) {
-        auto body = crow::json::load(req.body);
+        if (auto denied = requireIdentity(req, true)) return *denied;
 
-        if (!body) {
-            return jsonError(400, "Invalid JSON");
-        }
+        auto body = crow::json::load(req.body);
+        if (!body) return jsonError(400, "Invalid JSON");
 
         Scenario scenario;
         std::string error;
-
-        if (!applyJson(body, scenario, error)) {
-            return jsonError(400, error);
-        }
+        if (!applyJson(body, scenario, error)) return jsonError(400, error);
 
         return crow::response(201, toJson(scenarios.create(scenario)));
     });
 
     // GET /api/scenarios/<id> -> retrieve one scenario
     CROW_ROUTE(app, "/api/scenarios/<int>").methods("GET"_method)
-    ([&scenarios](int id) {
-        auto scenario = scenarios.get(id);
+    ([&scenarios](const crow::request& req, int id) {
+        if (auto denied = requireIdentity(req, false)) return *denied;
 
-        if (!scenario) {
-            return jsonError(404, "Scenario not found");
-        }
+        auto scenario = scenarios.get(id);
+        if (!scenario) return jsonError(404, "Scenario not found");
 
         return crow::response(200, toJson(*scenario));
     });
@@ -491,43 +483,32 @@ int main() {
     // PUT /api/scenarios/<id> -> update an existing scenario
     CROW_ROUTE(app, "/api/scenarios/<int>").methods("PUT"_method)
     ([&scenarios](const crow::request& req, int id) {
-        auto existing = scenarios.get(id);
+        if (auto denied = requireIdentity(req, true)) return *denied;
 
-        if (!existing) {
-            return jsonError(404, "Scenario not found");
-        }
+        auto existing = scenarios.get(id);
+        if (!existing) return jsonError(404, "Scenario not found");
 
         auto body = crow::json::load(req.body);
-
-        if (!body) {
-            return jsonError(400, "Invalid JSON");
-        }
+        if (!body) return jsonError(400, "Invalid JSON");
 
         Scenario updated = *existing;
         std::string error;
+        if (!applyJson(body, updated, error)) return jsonError(400, error);
 
-        if (!applyJson(body, updated, error)) {
-            return jsonError(400, error);
-        }
-
-        if (!scenarios.update(updated)) {
-            return jsonError(404, "Scenario not found");
-        }
+        if (!scenarios.update(updated)) return jsonError(404, "Scenario not found");
 
         return crow::response(200, toJson(updated));
     });
 
     // DELETE /api/scenarios/<id> -> delete a scenario
     CROW_ROUTE(app, "/api/scenarios/<int>").methods("DELETE"_method)
-    ([&scenarios](int id) {
-        if (!scenarios.remove(id)) {
-            return jsonError(404, "Scenario not found");
-        }
+    ([&scenarios](const crow::request& req, int id) {
+        if (auto denied = requireIdentity(req, true)) return *denied;
 
+        if (!scenarios.remove(id)) return jsonError(404, "Scenario not found");
         return crow::response(204);
     });
 
->>>>>>> d744353 (Update scenario backend and Supabase integration)
     // Educator Portal: assignments and session results (see educator_routes.cpp)
     registerEducatorRoutes(app, assignments, results);
 
