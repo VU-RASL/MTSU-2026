@@ -434,9 +434,6 @@ int main() {
         response.set_header("Cache-Control", "no-store");
         return response;
     });
-<<<<<<< HEAD
-	
-=======
 
     // =========================================================================
     // Scenarios
