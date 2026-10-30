@@ -524,7 +524,6 @@ int main() {
         return crow::response(204);
     });
 
->>>>>>> d744353 (Update scenario backend and Supabase integration)
     // Educator Portal: assignments and session results (see educator_routes.cpp)
     registerEducatorRoutes(app, assignments, results);
 
