@@ -443,7 +443,7 @@ int main() {
     // GET /api/scenarios -> list all scenarios, optionally searching by title
     CROW_ROUTE(app, "/api/scenarios").methods("GET"_method)
     ([&scenarios](const crow::request& req) {
-        if (auto denied = requireIdentity(req, false)) return *denied;
+        if (auto denied = requireIdentity(req, false)) return std::move(*denied);
 
         const char* search = req.url_params.get("search");
 
@@ -457,7 +457,7 @@ int main() {
     // POST /api/scenarios -> create a new scenario
     CROW_ROUTE(app, "/api/scenarios").methods("POST"_method)
     ([&scenarios](const crow::request& req) {
-        if (auto denied = requireIdentity(req, true)) return *denied;
+        if (auto denied = requireIdentity(req, true)) return std::move(*denied);
 
         auto body = crow::json::load(req.body);
         if (!body) return jsonError(400, "Invalid JSON");
@@ -472,7 +472,7 @@ int main() {
     // GET /api/scenarios/<id> -> retrieve one scenario
     CROW_ROUTE(app, "/api/scenarios/<int>").methods("GET"_method)
     ([&scenarios](const crow::request& req, int id) {
-        if (auto denied = requireIdentity(req, false)) return *denied;
+        if (auto denied = requireIdentity(req, false)) return std::move(*denied);
 
         auto scenario = scenarios.get(id);
         if (!scenario) return jsonError(404, "Scenario not found");
@@ -483,7 +483,7 @@ int main() {
     // PUT /api/scenarios/<id> -> update an existing scenario
     CROW_ROUTE(app, "/api/scenarios/<int>").methods("PUT"_method)
     ([&scenarios](const crow::request& req, int id) {
-        if (auto denied = requireIdentity(req, true)) return *denied;
+        if (auto denied = requireIdentity(req, true)) return std::move(*denied);
 
         auto existing = scenarios.get(id);
         if (!existing) return jsonError(404, "Scenario not found");
