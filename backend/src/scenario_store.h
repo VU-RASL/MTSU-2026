@@ -3,8 +3,6 @@
 #include <optional>  // std::optional, for "a persona, or nothing"
 #include <string>
 #include <vector>
-#include <mutex>
-#include <map>
 #include "scenario.h" 
 
  /* 
