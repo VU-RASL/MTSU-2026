@@ -23,8 +23,12 @@
 #include "crow/middlewares/cors.h"
 
 class AssignmentStore;
+class PersonaStore;
+class ScenarioStore;
 class SessionResultStore;
 
 using EducatorApp = crow::App<crow::CORSHandler>;
 
-void registerEducatorRoutes(EducatorApp& app, AssignmentStore& assignments, SessionResultStore& results);
+void registerEducatorRoutes(EducatorApp& app, AssignmentStore& assignments, 
+							SessionResultStore& results, PersonaStore& personas,
+							ScenarioStore& scenarios);

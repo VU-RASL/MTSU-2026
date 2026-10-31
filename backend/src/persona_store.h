@@ -81,6 +81,8 @@ public:
     // Returns false if nothing had that id. Used by DELETE /api/personas/<id>.
     // -------------------------------------------------------------------------
     bool remove(int id);
+    
+    std::optional<Persona> getActive(int id) const;
 
 private:
     // liew;/ wiped this section and rewrote. baseUrl and secretKey correspond to 

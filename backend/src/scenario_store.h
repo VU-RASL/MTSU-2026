@@ -1,16 +1,13 @@
 #pragma once
 
+#include <optional>
+#include <string>
 #include <vector>
-#include "scenario.h" 
+#include "scenario.h"
+#include "supabase_client.h" 
 
- /* 
- This class manages the scenarios created by educators. 
 
- The store is responsible for creating, retrieving, updating, 
- and deleting scenarios. It does not handle HTTP requests directly.
- */
-
- class ScenarioStore {
+class ScenarioStore {
 public:
     // Returns a list of all scenarios, optionally filtered by a case-insensitive title search.
     std::vector<Scenario> list(const std::string& search = "") const;
@@ -19,17 +16,15 @@ public:
     std::optional<Scenario> get(int id) const;
     
     // Creates a new scenario, assigns it an ID and creation timestamp, and stores it. Returns the stored copy.
-    Scenario create(Scenario s);
+    Scenario create(Scenario scenario);
     
     // Updates an existing scenario. Returns false if the scenario does not exist.
-    bool update(const Scenario& s);
+    bool update(const Scenario& scenario);
     
     // Removes a scenario by its ID. Returns false if the scenario does not exist.
     bool remove(int id);
         
 private:
-    mutable std::mutex mutex_;  // Mutex to ensure thread safety for concurrent access.
-    std::map<int, Scenario> scenarios_;  // Map of scenario ID to Scenario object
-    int nextId_ = 1;  // Next available ID for a new scenario.  
+	SupabaseClient db_;  
 };
 

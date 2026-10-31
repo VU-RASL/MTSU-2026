@@ -70,6 +70,8 @@
 #include "learning_topic.h"           // LearningTopic, toJson(), applyJson()
 #include "learning_topic_store.h"     // LearningTopicStore
 #include "assignment_store.h"         // AssignmentStore (Educator Portal)
+#include "scenario_routes.h"
+#include "scenario_store.h"
 #include "session_result_store.h"     // SessionResultStore (Educator Portal)
 #include "educator_routes.h"          // registerEducatorRoutes()
 
@@ -217,6 +219,7 @@ int main() {
     LearningTopicStore topics;  // the Learning page's topics (Supabase table: learning_topics)
     AssignmentStore assignments;     // Educator Portal (Supabase table: assignments)
     SessionResultStore results;      // Educator Portal (Supabase table: session_results)
+    ScenarioStore scenarios;
 
     // -------------------------------------------------------------------------
     // GET /api/health
@@ -431,8 +434,10 @@ int main() {
         return response;
     });
 	
+	registerScenarioRoutes(app, scenarios);
+	
     // Educator Portal: assignments and session results (see educator_routes.cpp)
-    registerEducatorRoutes(app, assignments, results);
+    registerEducatorRoutes(app, assignments, results, store, scenarios);
 
     // -------------------------------------------------------------------------
     // 3. Start the server

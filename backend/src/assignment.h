@@ -21,6 +21,8 @@ struct Assignment {
     int id = 0;
     std::string createdAt;
     int scenarioId = 0;
+    int personaId = 0;
+    bool archived = false;
     std::string studentId;              // text until the user tables exist
     std::string assignedBy;             // educator's user id; empty = unknown
     std::string status = "assigned";

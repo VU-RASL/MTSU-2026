@@ -21,5 +21,8 @@ add_executable(server
     src/session_result.cpp
     src/session_result_store.cpp
     src/educator_routes.cpp
+    src/scenario.cpp
+    src/scenario_store.cpp
+    src/scenario_routes.cpp
     )
 target_link_libraries(server PRIVATE Crow::Crow CURL::libcurl)

@@ -292,3 +292,14 @@ bool PersonaStore::remove(int id) {
 
     return rows.size() == 1;
 }
+
+std::optional<Persona> PersonaStore::getActive(int id) const {
+    if (id <= 0) return std::nullopt;
+    const auto rows = parseRows(request(
+        "GET", "personas?id=eq." + std::to_string(id) +
+        "&archived_at=is.null&select=id,created_at,title,data"));
+
+    if (rows.size() == 0) return std::nullopt;
+    if (rows.size() != 1) throw std::runtime_error("Supabase returned multiple personas");
+    return fromDatabaseRow(rows[0]);
+}
