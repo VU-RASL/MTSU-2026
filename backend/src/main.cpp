@@ -503,7 +503,7 @@ int main() {
     // DELETE /api/scenarios/<id> -> delete a scenario
     CROW_ROUTE(app, "/api/scenarios/<int>").methods("DELETE"_method)
     ([&scenarios](const crow::request& req, int id) {
-        if (auto denied = requireIdentity(req, true)) return *denied;
+        if (auto denied = requireIdentity(req, true)) return std::move(*denied);
 
         if (!scenarios.remove(id)) return jsonError(404, "Scenario not found");
         return crow::response(204);
