@@ -24,5 +24,9 @@ add_executable(server
     src/scenario.cpp
     src/scenario_store.cpp
     src/scenario_routes.cpp
+    src/patient_instructions.cpp
+    src/realtime_transport.cpp
+    src/realtime_setup.cpp
+    src/realtime_routes.cpp
     )
 target_link_libraries(server PRIVATE Crow::Crow CURL::libcurl)

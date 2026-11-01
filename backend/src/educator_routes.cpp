@@ -36,6 +36,7 @@
 #include "assignment_context.h"
 #include "assignment_store.h"
 #include "auth.h"
+#include "patient_instructions.h"
 #include "session_result.h"
 #include "session_result_store.h"
 
@@ -321,6 +322,33 @@ void registerEducatorRoutes(EducatorApp& app, AssignmentStore& assignments,
             return response;
         } catch (const AssignmentContextError& error) {
             return jsonError(error.status(), error.what());
+        }
+    });
+    
+    // educator preview only; this does not create an attempt or call OpenAI
+    CROW_ROUTE(app, "/api/assignments/<int>/instructions").methods("GET"_method)
+    ([&assignments, &personas, &scenarios](const crow::request& req, int id) {
+        const auto user = currentUser(req);
+        if (!user) return jsonError(401, "Login required");
+        if (!isEducatorRole(user->role)) return jsonError(403, "Educators only");
+
+        try {
+            const auto context = resolveAssignmentContext(
+                *user, id, assignments, personas, scenarios);
+            const auto instructions = buildPatientInstructions(context);
+
+            crow::json::wvalue body;
+            body["assignmentId"] = context.assignment.id;
+            body["instructionVersion"] = instructions.version;
+            body["instructions"] = instructions.text;
+
+            auto response = crow::response(200, body);
+            response.set_header("Cache-Control", "no-store");
+            return response;
+        } catch (const AssignmentContextError& error) {
+            return jsonError(error.status(), error.what());
+        } catch (const PatientInstructionsError& error) {
+            return jsonError(409, error.what());
         }
     });
 }

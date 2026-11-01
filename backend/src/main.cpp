@@ -74,6 +74,7 @@
 #include "scenario_store.h"
 #include "session_result_store.h"     // SessionResultStore (Educator Portal)
 #include "educator_routes.h"          // registerEducatorRoutes()
+#include "realtime_setup.h"
 
 // Helpers private to this file.
 namespace {
@@ -434,6 +435,8 @@ int main() {
         return response;
     });
 	
+	RealtimeSetup realtime(assignments, store, scenarios);
+	registerRealtimeRoutes(app, realtime);
 	registerScenarioRoutes(app, scenarios);
 	
     // Educator Portal: assignments and session results (see educator_routes.cpp)
@@ -452,6 +455,6 @@ int main() {
     // PersonaStore needs its mutex). run() starts listening and doesn't return
     // until the server is stopped (Ctrl+C).
     app.port(port).multithreaded().run();
-
+	realtime.shutdown();
     curl_global_cleanup();
 }
