@@ -1,41 +1,71 @@
-import React, { useState } from 'react'
+import React, { useEffect, useState } from 'react'
 import Header from '../components/Header'
 import Footer from '../components/Footer'
+import { listAssignments, startAssignment, type Assignment } from '../api/assignments'
+import { saveAttempt } from '../api/results'
 
-// Mock scenario list for graphical preview
-const visualScenarios = [
-  {
-    id: 1,
-    title: 'Pediatric MMR Vaccination and Anaphylaxis Response',
-    summary: 'A grandmother who is hesitant about vaccinating her 5 year old grandson.',
-    difficulty: 'Intermediate',
-    estimatedTime: '15 mins',
-  },
-  {
-    id: 2,
-    title: 'Autism Diagnosis Consultation',
-    summary: 'Initial consultation and behavioral evaluation scenario with a young child and family.',
-    difficulty: 'Advanced',
-    estimatedTime: '30 mins',
-  },
-  {
-    id: 3,
-    title: 'Behavioral Intervention Practice',
-    summary: 'Practicing communication strategies and managing sensory overload situations.',
-    difficulty: 'Beginner',
-    estimatedTime: '20 mins',
-  },
-]
+const STATUS_LABELS: Record<Assignment['status'], string> = {
+  assigned: 'Assigned',
+  in_progress: 'In progress',
+  completed: 'Completed',
+  reviewed: 'Reviewed',
+}
+
+// The Student Portal now loads the student's ASSIGNMENTS from the backend.
+// An assignment only stores a scenarioId (no title/summary), so cards show
+// "Scenario #<id>" until the /api/scenarios routes are merged into main.
+// When they are, fetch scenarios and look up each title by scenarioId.
 
 const StudentPortal: React.FC = () => {
+  const [assignments, setAssignments] = useState<Assignment[]>([])
+  const [loading, setLoading] = useState(true)
+  const [error, setError] = useState('')
   const [searchTerm, setSearchTerm] = useState('')
+  const [notes, setNotes] = useState<Record<number, string>>({})
+  const [message, setMessage] = useState('')
 
-  // Filter scenario items by title or summary search term
-  const filteredScenarios = visualScenarios.filter(
-    (s) =>
-      s.title.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      s.summary.toLowerCase().includes(searchTerm.toLowerCase())
+  useEffect(() => {
+    listAssignments()
+      .then(setAssignments)
+      .catch((e: Error) => setError(e.message))
+      .finally(() => setLoading(false))
+  }, [])
+
+  const filtered = assignments.filter((a) =>
+    `scenario ${a.scenarioId} ${a.status}`.toLowerCase().includes(searchTerm.toLowerCase())
   )
+
+  // Data going TO the backend: PUT the status.
+  async function handleStart(id: number) {
+    setError('')
+    setMessage('')
+    try {
+      const updated = await startAssignment(id)
+      setAssignments((prev) => prev.map((a) => (a.id === id ? updated : a)))
+    } catch (e) {
+      setError((e as Error).message)
+    }
+  }
+
+  // Data going TO the backend: POST a practice attempt (transcript).
+  // Placeholder input until the real practice conversation page exists.
+  async function handleSave(id: number) {
+    const text = (notes[id] ?? '').trim()
+    if (!text) {
+      setError('Type something before saving an attempt.')
+      return
+    }
+    setError('')
+    setMessage('')
+    try {
+      await saveAttempt(id, [{ role: 'student', text }])
+      setAssignments((prev) => prev.map((a) => (a.id === id ? { ...a, status: 'completed' } : a)))
+      setNotes({ ...notes, [id]: '' })
+      setMessage('Attempt saved.')
+    } catch (e) {
+      setError((e as Error).message)
+    }
+  }
 
   return (
     <>
@@ -47,23 +77,26 @@ const StudentPortal: React.FC = () => {
             Select a scenario to begin your AI patient training session.
           </p>
 
-          {/* Search bar */}
           <div className="form-group">
-            <label htmlFor="scenario-search">Search Scenarios</label>
+            <label htmlFor="scenario-search">Search Assignments</label>
             <input
               id="scenario-search"
               type="text"
-              placeholder="Search by title or description..."
+              placeholder="Search by scenario or status..."
               value={searchTerm}
               onChange={(e) => setSearchTerm(e.target.value)}
             />
           </div>
 
-          {/* Scenario cards container */}
+          {loading && <p>Loading assignments...</p>}
+          {error && <p style={{ color: 'crimson' }}>Error: {error}</p>}
+          {message && <p>{message}</p>}
+          {!loading && !error && filtered.length === 0 && <p>No assignments yet.</p>}
+
           <div style={{ display: 'flex', flexDirection: 'column', gap: '16px', marginTop: '12px' }}>
-            {filteredScenarios.map((scenario) => (
+            {filtered.map((a) => (
               <div
-                key={scenario.id}
+                key={a.id}
                 style={{
                   padding: '16px',
                   border: '1px solid var(--border)',
@@ -74,23 +107,30 @@ const StudentPortal: React.FC = () => {
                   gap: '8px',
                 }}
               >
-                <h2 style={{ fontSize: '20px', margin: 0 }}>{scenario.title}</h2>
-                <p style={{ margin: 0, color: 'var(--text)' }}>{scenario.summary}</p>
-                <div
-                  style={{
-                    display: 'flex',
-                    justifyContent: 'space-between',
-                    fontSize: '14px',
-                    color: 'var(--text)',
-                    marginTop: '8px',
-                  }}
-                >
-                  <span><strong>Difficulty:</strong> {scenario.difficulty}</span>
-                  <span><strong>Duration:</strong> {scenario.estimatedTime}</span>
+                <h2 style={{ fontSize: '20px', margin: 0 }}>Scenario #{a.scenarioId}</h2>
+                <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '14px' }}>
+                  <span><strong>Status:</strong> {STATUS_LABELS[a.status] ?? a.status}</span>
+                  <span><strong>Assigned:</strong> {new Date(a.createdAt).toLocaleDateString()}</span>
                 </div>
-                <button type="button" style={{ marginTop: '12px' }}>
-                  Start Scenario
-                </button>
+
+                {a.status === 'assigned' && (
+                  <button type="button" style={{ marginTop: '12px' }} onClick={() => handleStart(a.id)}>
+                    Start Scenario
+                  </button>
+                )}
+
+                {a.status === 'in_progress' && (
+                  <div className="form-group">
+                    <textarea
+                      placeholder="Practice response (temporary until the chat page exists)"
+                      value={notes[a.id] ?? ''}
+                      onChange={(e) => setNotes({ ...notes, [a.id]: e.target.value })}
+                    />
+                    <button type="button" onClick={() => handleSave(a.id)}>
+                      Save Attempt
+                    </button>
+                  </div>
+                )}
               </div>
             ))}
           </div>
