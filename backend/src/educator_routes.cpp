@@ -33,8 +33,10 @@
 
 #include "assignment.h"
 #include "assignment_access.h"
+#include "assignment_context.h"
 #include "assignment_store.h"
 #include "auth.h"
+#include "patient_instructions.h"
 #include "session_result.h"
 #include "session_result_store.h"
 
@@ -69,7 +71,9 @@ crow::response jsonList(const std::vector<T>& items) {
 
 }  // namespace
 
-void registerEducatorRoutes(EducatorApp& app, AssignmentStore& assignments, SessionResultStore& results) {
+void registerEducatorRoutes(EducatorApp& app, AssignmentStore& assignments, 
+							SessionResultStore& results, PersonaStore& personas,
+							ScenarioStore& scenarios) {
 
     CROW_ROUTE(app, "/api/assignments").methods("GET"_method)
     ([&assignments](const crow::request& req) {
@@ -111,9 +115,9 @@ void registerEducatorRoutes(EducatorApp& app, AssignmentStore& assignments, Sess
         return jsonList(assignments.list(filter));
     });
 
-    // create an assignment and record the verified caller as its owner
+        // create an assignment using an educator-selected persona and scenario
     CROW_ROUTE(app, "/api/assignments").methods("POST"_method)
-    ([&assignments](const crow::request& req) {
+    ([&assignments, &personas, &scenarios](const crow::request& req) {
         const auto user = currentUser(req);
         if (!user) return jsonError(401, "Login required");
         if (!isEducatorRole(user->role)) return jsonError(403, "Educators only");
@@ -124,8 +128,15 @@ void registerEducatorRoutes(EducatorApp& app, AssignmentStore& assignments, Sess
         Assignment assignment;
         std::string error;
         if (!applyCreateJson(body, assignment, error)) return jsonError(400, error);
+
         if (lookupRole(assignment.studentId) != Role::Student) {
             return jsonError(400, "'studentId' must be the id of a student in profiles");
+        }
+        if (!scenarios.get(assignment.scenarioId)) {
+            return jsonError(400, "Selected scenario is missing or archived");
+        }
+        if (!personas.getActive(assignment.personaId)) {
+            return jsonError(400, "Selected persona is missing or archived");
         }
 
         // never accept the owner ID from the request body
@@ -289,5 +300,55 @@ void registerEducatorRoutes(EducatorApp& app, AssignmentStore& assignments, Sess
         if (!results.saveReview(*result)) return jsonError(404, "Result not found");
         assignments.setStatus(result->assignmentId, "reviewed");
         return crow::response(200, toJson(*result));
+    });
+    
+    // return only the approved references; keep full content inside the backend
+    CROW_ROUTE(app, "/api/assignments/<int>/context").methods("GET"_method)
+    ([&assignments, &personas, &scenarios](const crow::request& req, int id) {
+        const auto user = currentUser(req);
+        if (!user) return jsonError(401, "Login required");
+
+        try {
+            const auto context = resolveAssignmentContext(
+                *user, id, assignments, personas, scenarios);
+
+            crow::json::wvalue body;
+            body["assignmentId"] = context.assignment.id;
+            body["scenarioId"] = context.scenario.id;
+            body["personaId"] = context.persona.id;
+
+            auto response = crow::response(200, body);
+            response.set_header("Cache-Control", "no-store");
+            return response;
+        } catch (const AssignmentContextError& error) {
+            return jsonError(error.status(), error.what());
+        }
+    });
+    
+    // educator preview only; this does not create an attempt or call OpenAI
+    CROW_ROUTE(app, "/api/assignments/<int>/instructions").methods("GET"_method)
+    ([&assignments, &personas, &scenarios](const crow::request& req, int id) {
+        const auto user = currentUser(req);
+        if (!user) return jsonError(401, "Login required");
+        if (!isEducatorRole(user->role)) return jsonError(403, "Educators only");
+
+        try {
+            const auto context = resolveAssignmentContext(
+                *user, id, assignments, personas, scenarios);
+            const auto instructions = buildPatientInstructions(context);
+
+            crow::json::wvalue body;
+            body["assignmentId"] = context.assignment.id;
+            body["instructionVersion"] = instructions.version;
+            body["instructions"] = instructions.text;
+
+            auto response = crow::response(200, body);
+            response.set_header("Cache-Control", "no-store");
+            return response;
+        } catch (const AssignmentContextError& error) {
+            return jsonError(error.status(), error.what());
+        } catch (const PatientInstructionsError& error) {
+            return jsonError(409, error.what());
+        }
     });
 }

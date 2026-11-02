@@ -1,5 +1,7 @@
 #include "scenario.h"
 
+#include <cmath>
+#include <limits>
 #include <utility>
 
 namespace {
@@ -119,7 +121,9 @@ bool applyJson(const crow::json::rvalue& body, Scenario& scenario, std::string& 
 
         double value = estimatedTime->d();
 
-        if (value < 0 || value != static_cast<int>(value)) {
+        // check the range before converting, so a huge number can't overflow the int
+        if (value < 0 || value > std::numeric_limits<int>::max() ||
+            value != std::floor(value)) {
             error = "'estimatedTime' must be a non-negative whole number";
             return false;
         }

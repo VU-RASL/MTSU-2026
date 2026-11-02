@@ -24,8 +24,12 @@ services:
       # Pass the Supabase credentials from the root .env into the backend.
       SUPABASE_URL: "${SUPABASE_URL:?SUPABASE_URL is required}"
       SUPABASE_SECRET_KEY: "${SUPABASE_SECRET_KEY:?SUPABASE_SECRET_KEY is required}"
-      # Temporary: profiles.id to act as when a request has no X-User-Id header.
-      DEV_USER_ID: "${DEV_USER_ID:-}"
+      # Public Supabase key the backend uses to verify sign-in tokens (required).
+      SUPABASE_PUBLISHABLE_KEY: "${SUPABASE_PUBLISHABLE_KEY:?SUPABASE_PUBLISHABLE_KEY is required}"
+      # OpenAI settings for voice sessions. Optional: without them the server
+      # still runs, and only POST /api/realtime/session fails.
+      OPENAI_API_KEY: "${OPENAI_API_KEY:-}"
+      OPENAI_REALTIME_MODEL: "${OPENAI_REALTIME_MODEL:-}"
     # Publish container ports on your computer.
     ports:
       # Map the customizable host port to the fixed internal API port.

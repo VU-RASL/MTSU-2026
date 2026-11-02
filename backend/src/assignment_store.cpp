@@ -9,7 +9,8 @@
 
 namespace {
 
-const char* kColumns = "select=id,created_at,scenario_id,student_id,assigned_by,status";
+const char* kColumns = "select=id,created_at,scenario_id,persona_id,student_id,"
+					   "assigned_by,status,archived_at";
 
 // One database row -> Assignment. Throws if Supabase sends something unexpected.
 Assignment fromRow(const crow::json::rvalue& row) {
@@ -40,6 +41,28 @@ Assignment fromRow(const crow::json::rvalue& row) {
     a.studentId = std::string(row["student_id"].s());
     if (row["assigned_by"].t() == type::String) a.assignedBy = std::string(row["assigned_by"].s());
     a.status = std::string(row["status"].s());
+    
+    if (!row.has("persona_id") || !row.has("archived_at")) {
+        throw std::runtime_error("Supabase returned incomplete assignment references");
+    }
+
+    const auto& persona = row["persona_id"];
+    if (persona.t() != type::Null) {
+        if (persona.t() != type::Number ||
+            (persona.nt() != crow::json::num_type::Signed_integer &&
+             persona.nt() != crow::json::num_type::Unsigned_integer) ||
+            persona.d() < 1 || persona.d() > std::numeric_limits<int>::max()) {
+            throw std::runtime_error("Supabase returned an invalid assignment persona");
+        }
+        a.personaId = static_cast<int>(persona.i());
+    }
+
+    if (row["archived_at"].t() != type::Null &&
+        row["archived_at"].t() != type::String) {
+        throw std::runtime_error("Supabase returned an invalid assignment archive time");
+    }
+    a.archived = row["archived_at"].t() != type::Null;
+    
     return a;
 }
 
@@ -70,7 +93,10 @@ std::optional<Assignment> AssignmentStore::get(int id) const {
 
 Assignment AssignmentStore::create(const Assignment& a) {
     crow::json::wvalue row;
+	
+	if (a.personaId <= 0) throw std::invalid_argument("An approved persona is required");
     row["scenario_id"] = a.scenarioId;
+    row["persona_id"] = a.personaId;
     row["student_id"] = a.studentId;
     if (a.assignedBy.empty()) {
         row["assigned_by"] = nullptr;
