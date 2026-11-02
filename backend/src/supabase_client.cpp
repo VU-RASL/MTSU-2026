@@ -15,9 +15,21 @@ namespace {
 
 // libcurl calls this as response data arrives; we append it to a string.
 size_t receiveBody(char* data, size_t size, size_t count, void* output) noexcept {
+    constexpr size_t limit = 8 * 1024 * 1024;
+    
+    if (size != 0 && count > limit / size) {
+        return 0;
+    }
+    
     const size_t bytes = size * count;
     try {
-        static_cast<std::string*>(output)->append(data, bytes);
+        auto& body = *static_cast<std::string*>(output);
+        
+        if (body.size() > limit || bytes > limit - body.size()) {
+            return 0;
+        }
+        
+        body.append(data, bytes);
         return bytes;
     } catch (...) {
         return 0;  // tells libcurl to stop
@@ -98,7 +110,7 @@ std::string SupabaseClient::request(const std::string& method,
     long status = 0;
     curl_easy_getinfo(curl.get(), CURLINFO_RESPONSE_CODE, &status);
     if (status < 200 || status >= 300) {
-        throw std::runtime_error("Supabase returned HTTP " + std::to_string(status) + ": " + responseBody);
+        throw std::runtime_error("Supabase returned HTTP " + std::to_string(status));
     }
 
     return responseBody;

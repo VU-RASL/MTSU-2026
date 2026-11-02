@@ -28,5 +28,6 @@ add_executable(server
     src/realtime_transport.cpp
     src/realtime_setup.cpp
     src/realtime_routes.cpp
+    src/realtime_collector.cpp
     )
 target_link_libraries(server PRIVATE Crow::Crow CURL::libcurl)

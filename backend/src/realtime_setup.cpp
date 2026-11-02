@@ -13,6 +13,7 @@
 #include "assignment_context.h"
 #include "patient_instructions.h"
 #include "realtime_transport.h"
+#include "realtime_collector.h"
 #include "supabase_client.h"
 
 namespace {
@@ -76,6 +77,7 @@ struct RealtimeSetup::Impl {
         std::time_t deadline = 0;
         std::atomic<bool> stop{false}, shutdown{false}, done{false};
         std::unique_ptr<RealtimeChannel> channel;
+        std::unique_ptr<RealtimeCollector> collector;
         std::thread worker;
     };
 
@@ -88,7 +90,8 @@ struct RealtimeSetup::Impl {
     std::string model = environment("OPENAI_REALTIME_MODEL");
 
     std::mutex mutex;
-    bool stopping = false;
+    std::atomic<bool> stopping{false};
+    std::thread recovery;
     std::map<std::string, std::shared_ptr<Running>> running;
 
     Impl(AssignmentStore& a, PersonaStore& p, ScenarioStore& s)
@@ -161,14 +164,80 @@ struct RealtimeSetup::Impl {
         }
     }
 
+	    void attach(const std::shared_ptr<Running>& live) {
+        live->channel = std::make_unique<RealtimeChannel>(
+            key, live->call
+        );
+
+        const std::string instructions = textField(
+            live->collector->info(), "instructions"
+        );
+
+        crow::json::wvalue update;
+        update["event_id"] = "setup_" + live->id;
+        update["type"] = "session.update";
+        update["session"]["type"] = "realtime";
+        update["session"]["instructions"] = instructions;
+
+        live->channel->send(update.dump());
+
+        const auto readyBy =
+            std::chrono::steady_clock::now() +
+            std::chrono::seconds(10);
+
+        while (std::chrono::steady_clock::now() < readyBy) {
+            live->collector->tick();
+
+            if (auto event = live->channel->next()) {
+                const auto type = eventType(*event);
+
+                // Preserve collection events received during attachment.
+                live->collector->accept(*event);
+
+                if (type == "session.updated") {
+                    const auto parsed = crow::json::load(*event);
+
+                    if (!parsed.has("session") ||
+                        textField(parsed["session"], "instructions") !=
+                            instructions) {
+                        throw RealtimeError(
+                            502, "Monitoring acknowledgement mismatch"
+                        );
+                    }
+
+                    live->collector->flush();
+
+                    std::cerr
+                        << "[realtime monitor] session=" << live->id
+                        << " update acknowledged\n";
+
+                    return;
+                }
+            } else {
+                std::this_thread::sleep_for(
+                    std::chrono::milliseconds(20)
+                );
+            }
+        }
+
+        throw RealtimeError(
+            502, "Monitoring update was not acknowledged"
+        );
+    }
+
     void watch(const std::shared_ptr<Running>& live) noexcept {
         std::string reason = "monitor_lost";
         bool ended = false;
+        bool gap = false;
 
         try {
             while (true) {
-                if (live->stop) {
-                    reason = live->shutdown ? "server_shutdown" : "client_end";
+                live->collector->tick();
+
+                if (live->stop || live->collector->stopRequested()) {
+                    reason = live->shutdown
+                        ? "server_shutdown"
+                        : "client_end";
                     ended = !live->shutdown;
                     break;
                 }
@@ -180,35 +249,223 @@ struct RealtimeSetup::Impl {
                 }
 
                 if (auto event = live->channel->next()) {
-                    if (eventType(*event) == "error") break;
-
-                    // BE-06 will persist transcript and usage events here.
+                    live->collector->accept(*event);
                 } else {
                     std::this_thread::sleep_for(
                         std::chrono::milliseconds(20)
                     );
                 }
             }
-        } catch (...) {}
+        } catch (const CollectorLeaseLost&) {
+            // A stale collector must not terminate another owner's call.
+            live->channel.reset();
+            live->done = true;
+            return;
+        } catch (const std::exception&) {
+            gap = true;
+            live->collector->markGap();
 
-        // release the reservation only after hangup is confirmed
-        if (hangupRealtimeCall(key, live->call)) {
+            std::cerr
+                << "[realtime collector] collection interrupted: "
+                << live->id << '\n';
+        }
+
+        try {
             try {
-                change(
-                    live->id, live->call,
-                    ended ? "ended" : "failed", reason
-                );
-            } catch (...) {
-                std::cerr << "Realtime state repair required: "
-                          << live->id << '\n';
+                live->collector->flush();
+            } catch (const CollectorLeaseLost&) {
+                throw;
+            } catch (const std::exception&) {
+                gap = true;
             }
-        } else {
-            std::cerr << "Realtime hangup confirmation required: "
-                      << live->id << '\n';
+
+            if (!live->collector->owns()) {
+                throw CollectorLeaseLost();
+            }
+
+            if (!hangupRealtimeCall(key, live->call)) {
+                std::cerr
+                    << "[realtime collector] hangup unconfirmed: "
+                    << live->id << '\n';
+            } else {
+                const auto drainBy =
+                    std::chrono::steady_clock::now() +
+                    std::chrono::seconds(2);
+
+                while (std::chrono::steady_clock::now() < drainBy) {
+                    std::optional<std::string> event;
+
+                    try {
+                        event = live->channel->next();
+                    } catch (const std::exception&) {
+                        break;
+                    }
+
+                    try {
+                        if (event) {
+                            live->collector->accept(*event);
+                        } else {
+                            std::this_thread::sleep_for(
+                                std::chrono::milliseconds(20)
+                            );
+                        }
+                    } catch (const CollectorLeaseLost&) {
+                        throw;
+                    } catch (const std::exception&) {
+                        gap = true;
+                        break;
+                    }
+                }
+
+                try {
+                    live->collector->flush();
+                } catch (const CollectorLeaseLost&) {
+                    throw;
+                } catch (const std::exception&) {
+                    gap = true;
+                }
+
+                live->collector->finish(ended, reason, gap);
+            }
+        } catch (const CollectorLeaseLost&) {
+            std::cerr
+                << "[realtime collector] ownership changed: "
+                << live->id << '\n';
+        } catch (const std::exception&) {
+            std::cerr
+                << "[realtime collector] recovery required: "
+                << live->id << '\n';
         }
 
         live->channel.reset();
         live->done = true;
+    }
+
+    void recoverLoop() noexcept {
+        while (!stopping) {
+            try {
+                if (!key.empty()) {
+                    const auto ids = RealtimeCollector::recoverable();
+
+                    std::lock_guard<std::mutex> lock(mutex);
+
+                    if (stopping) {
+                        break;
+                    }
+
+                    reap();
+
+                    for (const auto& id : ids) {
+                        if (running.size() >= 5) {
+                            break;
+                        }
+
+                        bool present = false;
+
+                        for (const auto& entry : running) {
+                            if (entry.second->id == id) {
+                                present = true;
+                            }
+                        }
+
+                        if (present) {
+                            continue;
+                        }
+
+                        std::shared_ptr<Running> live;
+
+                        try {
+                            auto collector =
+                                std::make_unique<RealtimeCollector>(id);
+
+                            const auto& saved = collector->info();
+
+                            live = std::make_shared<Running>();
+                            live->id = id;
+                            live->call = textField(saved, "callId");
+                            live->student = textField(saved, "studentId");
+                            live->assignmentId = static_cast<int>(
+                                saved["assignmentId"].i()
+                            );
+                            live->deadline = static_cast<std::time_t>(
+                                saved["deadlineEpoch"].d()
+                            );
+
+                            const std::string cacheKey =
+                                live->student + ":" +
+                                textField(saved, "requestKey");
+
+                            live->collector = std::move(collector);
+                            live->collector->markGap();
+
+                            if (std::time(nullptr) >= live->deadline ||
+                                live->collector->stopRequested()) {
+                                if (live->collector->owns() &&
+                                    hangupRealtimeCall(key, live->call)) {
+                                    live->collector->finish(
+                                        true,
+                                        live->collector->stopRequested()
+                                            ? "client_end"
+                                            : "deadline",
+                                        true
+                                    );
+                                }
+
+                                continue;
+                            }
+
+                            attach(live);
+
+                            if (textField(saved, "status") == "starting") {
+                                change(live->id, live->call, "activate");
+                            }
+
+                            running.emplace(cacheKey, live);
+
+                            try {
+                                live->worker = std::thread(
+                                    [this, live] { watch(live); }
+                                );
+                            } catch (...) {
+                                running.erase(cacheKey);
+                                throw;
+                            }
+
+                            std::cerr
+                                << "[realtime collector] recovered with gap: "
+                                << id << '\n';
+                        } catch (const CollectorLeaseLost&) {
+                            // Another process owns this call.
+                        } catch (const std::exception&) {
+                            if (live && live->collector &&
+                                live->collector->owns()) {
+                                try {
+                                    if (hangupRealtimeCall(key, live->call)) {
+                                        live->collector->finish(
+                                            false, "monitor_lost", true
+                                        );
+                                    }
+                                } catch (const std::exception&) {
+                                }
+                            }
+
+                            std::cerr
+                                << "[realtime collector] recovery deferred: "
+                                << id << '\n';
+                        }
+                    }
+                }
+            } catch (const std::exception&) {
+                std::cerr
+                    << "[realtime collector] recovery scan unavailable\n";
+            }
+
+            for (int i = 0; i < 50 && !stopping; ++i) {
+                std::this_thread::sleep_for(
+                    std::chrono::milliseconds(100)
+                );
+            }
+        }
     }
 
     void reap() {
@@ -227,7 +484,10 @@ struct RealtimeSetup::Impl {
 
 RealtimeSetup::RealtimeSetup(
     AssignmentStore& a, PersonaStore& p, ScenarioStore& s
-) : impl_(std::make_unique<Impl>(a, p, s)) {}
+) : impl_(std::make_unique<Impl>(a, p, s)) {
+	impl_->recovery = std::thread([state = impl_.get()] { state->recoverLoop(); }
+	);
+}
 
 RealtimeSetup::~RealtimeSetup() {
     shutdown();
@@ -267,6 +527,14 @@ std::pair<int, crow::json::wvalue> RealtimeSetup::start(
 
     if (found != state.running.end()) {
         const auto& live = found->second;
+        
+        if (live->answer.empty()) {
+            throw RealtimeError(
+                409,
+                "Recovered call has no cached SDP; end it before starting again",
+                live->id
+            );
+        }
 
         if (live->assignmentId != assignmentId || live->offer != offer) {
             throw RealtimeError(
@@ -351,6 +619,7 @@ std::pair<int, crow::json::wvalue> RealtimeSetup::start(
         static_cast<std::time_t>(reservation["deadline_epoch"].d());
 
     RealtimeCall call;
+    bool collectorAttempted = false;
 
     try {
         crow::json::wvalue config;
@@ -377,90 +646,11 @@ std::pair<int, crow::json::wvalue> RealtimeSetup::start(
 
         state.change(live->id, live->call, "bind");
 
-        live->channel = std::make_unique<RealtimeChannel>(
-            state.key, live->call
-        );
+        collectorAttempted = true;
+        live->collector =
+            std::make_unique<RealtimeCollector>(live->id);
 
-                // Confirm the attached sideband can process an update.
-        // Resend the same approved instructions used for creation.
-        crow::json::wvalue update;
-        update["event_id"] = "setup_" + live->id;
-        update["type"] = "session.update";
-        update["session"]["type"] = "realtime";
-        update["session"]["instructions"] = instructions.text;
-        live->channel->send(update.dump());
-
-        const auto readyBy =
-            std::chrono::steady_clock::now() + std::chrono::seconds(10);
-
-        bool ready = false;
-        size_t eventsSeen = 0;
-
-        while (std::chrono::steady_clock::now() < readyBy) {
-            if (auto event = live->channel->next()) {
-                ++eventsSeen;
-                const auto type = eventType(*event);
-
-                if (type == "error") {
-                    const auto parsed = crow::json::load(*event);
-                    crow::json::wvalue details;
-                    details["sessionId"] = live->id;
-
-                    if (parsed.has("error") &&
-                        parsed["error"].t() == crow::json::type::Object) {
-                        const auto& error = parsed["error"];
-
-                        for (const char* field : {"type", "code", "param"}) {
-                            if (error.has(field) &&
-                                error[field].t() == crow::json::type::String) {
-                                details[field] =
-                                    std::string(error[field].s()).substr(0, 200);
-                            }
-                        }
-                    }
-
-                    std::cerr << "[realtime monitor] "
-                              << details.dump() << '\n';
-
-                    throw RealtimeError(
-                        502, "OpenAI rejected the monitoring update"
-                    );
-                }
-
-                if (type == "session.updated") {
-                    const auto parsed = crow::json::load(*event);
-
-                    if (!parsed.has("session") ||
-                        textField(parsed["session"], "instructions") !=
-                            instructions.text) {
-                        throw RealtimeError(
-                            502, "Monitoring instruction acknowledgement mismatch"
-                        );
-                    }
-
-                    ready = true;
-                    break;
-                }
-            } else {
-                std::this_thread::sleep_for(
-                    std::chrono::milliseconds(20)
-                );
-            }
-        }
-
-        if (!ready) {
-            std::cerr << "[realtime monitor] session=" << live->id
-                      << " acknowledgement timed out; events_received="
-                      << eventsSeen << '\n';
-
-            throw RealtimeError(
-                502, "Realtime monitoring update was not acknowledged"
-            );
-        }
-
-        std::cerr << "[realtime monitor] session=" << live->id
-                  << " update acknowledged\n";
-
+        state.attach(live);
         state.change(live->id, live->call, "activate");
 
         auto body = publicSession(state.row(user, live->id));
@@ -494,15 +684,27 @@ std::pair<int, crow::json::wvalue> RealtimeSetup::start(
         		<< '\n';
 		}
         
-        const bool safeToRelease = call.id.empty()
-            ? (!call.attempted || call.rejected)
-            : hangupRealtimeCall(state.key, call.id);
+        const bool mayHangup =
+            !collectorAttempted ||
+            (live->collector && live->collector->owns());
+
+        const bool safeToRelease =
+            mayHangup &&
+            (call.id.empty()
+                ? (!call.attempted || call.rejected)
+                : hangupRealtimeCall(state.key, call.id));
 
         if (safeToRelease) {
             try {
-                state.change(
-                    live->id, call.id, "failed", "setup_failed"
-                );
+                if (live->collector) {
+                    live->collector->finish(
+                        false, "setup_failed", true
+                    );
+                } else {
+                    state.change(
+                        live->id, call.id, "failed", "setup_failed"
+                    );
+                }
             } catch (...) {
                 std::cerr << "Realtime state repair required: "
                           << live->id << '\n';
@@ -528,68 +730,104 @@ crow::json::wvalue RealtimeSetup::get(
 }
 
 crow::json::wvalue RealtimeSetup::end(
-    const CurrentUser& user, const std::string& id
+    const CurrentUser& user,
+    const std::string& id
 ) {
     auto& state = *impl_;
-    std::lock_guard<std::mutex> lock(state.mutex);
 
-    auto row = state.row(user, id);
-    const auto status = textField(row, "status");
-
-    if (status == "ended" || status == "failed") {
-        return publicSession(row);
-    }
-
-    for (const auto& [key, live] : state.running) {
-        if (live->id != id) continue;
-
-        live->stop = true;
-        if (live->worker.joinable()) live->worker.join();
+    {
+        std::lock_guard<std::mutex> lock(state.mutex);
 
         auto saved = state.row(user, id);
-        const auto savedStatus = textField(saved, "status");
+        const auto status = textField(saved, "status");
 
-        if (savedStatus != "ended" && savedStatus != "failed") {
+        if (status == "ended" || status == "failed") {
+            return publicSession(saved);
+        }
+
+        if (saved["call_id"].t() == crow::json::type::Null) {
             throw RealtimeError(
-                503, "Termination is not confirmed; retry ending this session"
+                409, "Setup outcome is unresolved"
             );
         }
-        return publicSession(saved);
+
+        RealtimeCollector::requestStop(id);
+
+        for (const auto& entry : state.running) {
+            const auto& live = entry.second;
+
+            if (live->id != id) {
+                continue;
+            }
+
+            live->stop = true;
+
+            if (live->worker.joinable()) {
+                live->worker.join();
+            }
+
+            saved = state.row(user, id);
+            const auto finalStatus = textField(saved, "status");
+
+            if (finalStatus == "ended" || finalStatus == "failed") {
+                return publicSession(saved);
+            }
+
+            throw RealtimeError(
+                503, "Termination pending; retry ending this session"
+            );
+        }
     }
 
-    if (row["call_id"].t() == crow::json::type::Null) {
-        throw RealtimeError(
-            409,
-            "Setup outcome is unresolved; do not release this reservation yet"
+    // Another process or the recovery worker owns the collector.
+    const auto until =
+        std::chrono::steady_clock::now() +
+        std::chrono::seconds(25);
+
+    while (std::chrono::steady_clock::now() < until) {
+        auto saved = state.row(user, id);
+        const auto status = textField(saved, "status");
+
+        if (status == "ended" || status == "failed") {
+            return publicSession(saved);
+        }
+
+        std::this_thread::sleep_for(
+            std::chrono::milliseconds(500)
         );
     }
 
-    const auto call = textField(row, "call_id");
-
-    if (!hangupRealtimeCall(state.key, call)) {
-        throw RealtimeError(
-            503, "Termination is not confirmed; retry ending this session"
-        );
-    }
-
-    state.change(id, call, "ended", "client_end");
-    return publicSession(state.row(user, id));
+    throw RealtimeError(
+        503, "Termination requested; retry after collector recovery"
+    );
 }
 
 void RealtimeSetup::shutdown() {
     auto& state = *impl_;
-    std::lock_guard<std::mutex> lock(state.mutex);
 
-    if (state.stopping) return;
-    state.stopping = true;
+    {
+        std::lock_guard<std::mutex> lock(state.mutex);
 
-    for (const auto& [key, live] : state.running) {
-        live->shutdown = true;
-        live->stop = true;
+        if (state.stopping.exchange(true)) {
+            return;
+        }
+
+        for (const auto& entry : state.running) {
+            entry.second->shutdown = true;
+            entry.second->stop = true;
+        }
     }
 
-    for (const auto& [key, live] : state.running) {
-        if (live->worker.joinable()) live->worker.join();
+    if (state.recovery.joinable()) {
+        state.recovery.join();
+    }
+
+    std::lock_guard<std::mutex> lock(state.mutex);
+
+    for (const auto& entry : state.running) {
+        if (entry.second->worker.joinable()) {
+            entry.second->worker.join();
+        }
     }
 
     state.running.clear();
