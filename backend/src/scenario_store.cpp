@@ -10,7 +10,8 @@
 namespace { 
 
 const char* kColumns = "select=id,created_at,title,summary,setting,difficulty,"
-					   "learning_objectives,instructions,patient_situation,required_tasks";
+					   "learning_objectives,instructions,patient_situation,required_tasks,"
+					   "estimated_time";
 					   
 const std::pair<const char*, std::string Scenario::*> kStrings[] = {
 	{"title", &Scenario::title},
@@ -63,6 +64,16 @@ Scenario fromRow(const crow::json::rvalue& row) {
         }
     }
 
+    // estimated_time: whole minutes, never negative (see 13_scenario_estimated_time.sql)
+    if (!row.has("estimated_time") || row["estimated_time"].t() != type::Number ||
+        (row["estimated_time"].nt() != num_type::Signed_integer &&
+         row["estimated_time"].nt() != num_type::Unsigned_integer) ||
+        row["estimated_time"].d() < 0 ||
+        row["estimated_time"].d() > std::numeric_limits<int>::max()) {
+        throw std::runtime_error("Supabase returned an invalid scenario estimated_time");
+    }
+    scenario.estimatedTime = static_cast<int>(row["estimated_time"].i());
+
     if (scenario.title.empty()) {
         throw std::runtime_error("Supabase returned an empty scenario title");
     }
@@ -80,6 +91,7 @@ std::string toBody(const Scenario& scenario) {
         for (const auto& item : scenario.*member) items.emplace_back(item);
         row[column] = std::move(items);
     }
+    row["estimated_time"] = scenario.estimatedTime;
     return row.dump();
 }
 
