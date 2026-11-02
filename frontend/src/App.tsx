@@ -6,6 +6,7 @@ import Learning from './pages/Learning'
 import EducatorReview from './pages/EducatorReview'
 import './App.css'
 import RTC from './pages/RTC'
+import TreeDemo from './pages/TreeDemo'
 
 function App() {
   //Using react router dom to manage routing between pages.
@@ -24,6 +25,7 @@ function App() {
           <Route path="/learning" element={<Learning />} />
           <Route path="/educator-review" element={<EducatorReview />} />
           <Route path="/rtc" element={<RTC />} />
+          <Route path="/tree-demo" element={<TreeDemo />} />
         </Routes>
       </Router>
     </>
