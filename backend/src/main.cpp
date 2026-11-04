@@ -9,7 +9,7 @@
 // This is where the program starts. It:
 //   1. Creates the Crow web server.
 //   2. Turns on CORS, so the React app is allowed to call us.
-//   3. Creates the PersonaStore and puts one sample persona in it.
+//   3. Creates the stores (personas, topics, assignments, results, scenarios).
 //   4. Defines the ROUTES: which code runs for which URL + HTTP method.
 //   5. Starts listening for requests (port 18080 by default).
 //
@@ -58,20 +58,22 @@
 #include <cstdlib>   // std::getenv, std::atoi, for reading the PORT setting
 #include <string>
 #include <vector>
+#include <optional>
 #include <curl/curl.h>
 #include <iostream>
 #include <stdexcept>
 
-#include "auth.h"					  // authorization framework
+#include "auth.h"                     // authorization framework
 #include "crow.h"                     // the Crow web framework
 #include "crow/middlewares/cors.h"    // CORS support (explained in main below)
 #include "persona.h"                  // Persona, toJson(), applyJson()
 #include "persona_store.h"            // PersonaStore
+#include "scenario.h"                 // Scenario, toJson(), applyJson()
+#include "scenario_store.h"           // ScenarioStore
+#include "scenario_routes.h"          // registerScenarioRoutes()
 #include "learning_topic.h"           // LearningTopic, toJson(), applyJson()
 #include "learning_topic_store.h"     // LearningTopicStore
 #include "assignment_store.h"         // AssignmentStore (Educator Portal)
-#include "scenario_routes.h"
-#include "scenario_store.h"
 #include "session_result_store.h"     // SessionResultStore (Educator Portal)
 #include "educator_routes.h"          // registerEducatorRoutes()
 #include "realtime_setup.h"
@@ -98,37 +100,46 @@ void checkSupabase() {
         throw std::runtime_error("Could not initialize HTTP client");
     }
 
-    std::string url = std::string(baseUrl) + "/rest/v1/personas?select=id&limit=1";
     std::string keyHeader = std::string("apikey: ") + secretKey;
+    std::string normalizedBaseUrl(baseUrl);
+    while (!normalizedBaseUrl.empty() && normalizedBaseUrl.back() == '/') {
+        normalizedBaseUrl.pop_back();
+    }
     std::string body;
 
     curl_slist* headers = nullptr;
     headers = curl_slist_append(headers, keyHeader.c_str());
     headers = curl_slist_append(headers, "Accept: application/json");
 
-    curl_easy_setopt(curl, CURLOPT_URL, url.c_str());
     curl_easy_setopt(curl, CURLOPT_HTTPHEADER, headers);
     curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, receiveBody);
     curl_easy_setopt(curl, CURLOPT_WRITEDATA, &body);
     curl_easy_setopt(curl, CURLOPT_CONNECTTIMEOUT, 5L);
     curl_easy_setopt(curl, CURLOPT_TIMEOUT, 15L);
 
-    const CURLcode result = curl_easy_perform(curl);
-
-    long status = 0;
-    curl_easy_getinfo(curl, CURLINFO_RESPONSE_CODE, &status);
+    try {
+        const std::string url =
+            normalizedBaseUrl + "/rest/v1/personas?select=id&limit=1";
+        curl_easy_setopt(curl, CURLOPT_URL, url.c_str());
+        const CURLcode result = curl_easy_perform(curl);
+        long status = 0;
+        curl_easy_getinfo(curl, CURLINFO_RESPONSE_CODE, &status);
+        if (result != CURLE_OK) {
+            throw std::runtime_error(curl_easy_strerror(result));
+        }
+        if (status != 200) {
+            throw std::runtime_error(
+                "Supabase connection check for personas returned HTTP " +
+                std::to_string(status));
+        }
+    } catch (...) {
+        curl_slist_free_all(headers);
+        curl_easy_cleanup(curl);
+        throw;
+    }
 
     curl_slist_free_all(headers);
     curl_easy_cleanup(curl);
-
-    if (result != CURLE_OK) {
-        throw std::runtime_error(curl_easy_strerror(result));
-    }
-
-    if (status != 200) {
-        throw std::runtime_error("Supabase connection check returned HTTP " + std::to_string(status));
-    }
-
     std::cout << "Supabase connection successful\n";
 }
 
@@ -175,9 +186,7 @@ int main() {
         curl_global_cleanup();
         return 1;
     }
-    
-    // CORSHandler lets the React dev server (a different port = a different
-    // "origin") call this API. Without it the browser blocks the requests.
+
     // -------------------------------------------------------------------------
     // 1. Create the server, with CORS turned on
     //
@@ -214,13 +223,13 @@ int main() {
         .headers("Content-Type, Authorization");  // React may send this header (needed for JSON bodies)
 
     // -------------------------------------------------------------------------
-    // 2. Create the store and add the sample persona
+    // 2. Create the stores
     // -------------------------------------------------------------------------
     PersonaStore store;
-    LearningTopicStore topics;  // the Learning page's topics (Supabase table: learning_topics)
+    LearningTopicStore topics;       // the Learning page's topics (Supabase table: learning_topics)
     AssignmentStore assignments;     // Educator Portal (Supabase table: assignments)
     SessionResultStore results;      // Educator Portal (Supabase table: session_results)
-    ScenarioStore scenarios;
+    ScenarioStore scenarios;         // shared by realtime and the scenario routes
 
     // -------------------------------------------------------------------------
     // GET /api/health
@@ -242,9 +251,9 @@ int main() {
     // -------------------------------------------------------------------------
     CROW_ROUTE(app, "/api/personas").methods("GET"_method)
     ([&store](const crow::request& req) {
-    
-    	if (auto error = requireIdentity(req, true)) return std::move(*error);
-    	
+
+        if (auto error = requireIdentity(req, true)) return std::move(*error);
+
         // Read ?search=... from the URL. get() returns nullptr if it's not there.
         const char* search = req.url_params.get("search");
 
@@ -256,6 +265,135 @@ int main() {
         return crow::response(200, crow::json::wvalue(std::move(items)));
     });
 
+    // GET /api/personas/schema
+    // Provides the frontend with metadata for generating the create form.
+    // Each path must match a field accepted by applyJson() in persona.cpp;
+    // the frontend uses that path both to build the nested POST body and to
+    // choose the right input type/label.
+    CROW_ROUTE(app, "/api/personas/schema").methods("GET"_method)
+    ([] {
+        // Build one schema object per UI field. Crow's writable JSON values
+        // serialize these entries as the "fields" array in the response.
+        std::vector<crow::json::wvalue> fields;
+
+        // Centralize the common metadata for a field so all schema entries
+        // have the same shape. "required" controls browser required-ness;
+        // "multiple" tells the frontend to convert a textarea into a list.
+        auto addField = [&fields](
+            const char* path,
+            const char* label,
+            const char* description,
+            const char* type,
+            const char* section,
+            const char* sectionDescription,
+            bool required = false,
+            bool multiple = false
+        ) {
+            crow::json::wvalue field;
+            field["path"] = path;
+            field["label"] = label;
+            field["description"] = description;
+            field["type"] = type;
+            field["section"] = section;
+            field["sectionDescription"] = sectionDescription;
+            field["required"] = required;
+            field["multiple"] = multiple;
+            fields.push_back(std::move(field));
+        };
+
+        addField("title", "Persona Title", "A descriptive title of this persona.",
+                 "text", "Persona Details", "", true);
+        addField("summary", "Persona Summary", "A brief summary of the persona's key details.",
+                 "textarea", "Persona Details", "");
+        addField("metadata.contentWarnings", "Content Warnings",
+                 "Specific warnings about sensitive or triggering content associated with the persona, helping to ensure safe and informed interactions.",
+                 "textarea", "Safety Notes",
+                 "Important context to support safe and informed interactions.", false, true);
+        addField("presentation.affect", "Affect",
+                 "Details the persona's emotional state or mood.",
+                 "textarea", "Presentation & Behavior",
+                 "Describes how the persona presents and behaves.");
+        addField("presentation.speech", "Speech",
+                 "Details how the persona communicates verbally.",
+                 "textarea", "Presentation & Behavior",
+                 "Describes how the persona presents and behaves.");
+        addField("presentation.misc", "Misc",
+                 "Additional behaviors or characteristics not covered elsewhere.",
+                 "textarea", "Presentation & Behavior",
+                 "Describes how the persona presents and behaves.");
+        addField("identity.name", "Name", "The persona's name.",
+                 "text", "Identity", "Information about the persona's identity.");
+        addField("identity.age", "Age", "The persona's age.",
+                 "number", "Identity", "Information about the persona's identity.");
+        addField("identity.ethnicity", "Ethnicity", "The persona's ethnicity.",
+                 "text", "Identity", "Information about the persona's identity.");
+        addField("identity.sex", "Sex", "Sex assigned at birth.",
+                 "text", "Identity", "Information about the persona's identity.");
+        addField("identity.gender", "Gender", "The persona's gender identity.",
+                 "text", "Identity", "Information about the persona's identity.");
+        addField("identity.sexualOrientation", "Sexual Orientation",
+                 "The persona's sexual orientation.",
+                 "text", "Identity", "Information about the persona's identity.");
+        addField("health.chiefComplaint", "Chief Complaint",
+                 "The main reason the persona is seeking care.",
+                 "textarea", "Health", "Details about the persona's health.");
+        addField("health.diagnosis.differential", "Differential",
+                 "Possible diagnoses being considered.",
+                 "textarea", "Diagnosis", "Information about the persona's diagnoses.",
+                 false, true);
+        addField("health.diagnosis.actual", "Actual",
+                 "The confirmed diagnosis.",
+                 "textarea", "Diagnosis", "Information about the persona's diagnoses.");
+        addField("health.historyOfPresentIllness.medicationsAndAllergies",
+                 "Medications and Allergies", "The persona's medications and allergies.",
+                 "textarea", "Current Health Issue",
+                 "Details of the persona's current health issue.", false, true);
+        addField("health.pastMedicalHistory", "Past Medical History",
+                 "The persona's past medical history.",
+                 "textarea", "Health", "Details about the persona's health.",
+                 false, true);
+        addField("health.familyMedicalHistory", "Family Medical History",
+                 "The persona's family medical history.",
+                 "textarea", "Health", "Details about the persona's health.",
+                 false, true);
+        addField("health.psychiatricProfile", "Psychiatric Profile",
+                 "The persona's psychiatric history or profile.",
+                 "textarea", "Health", "Details about the persona's health.");
+        addField("goals", "Goals", "The goals or objectives of the persona.",
+                 "textarea", "Additional Details", "", false, true);
+        addField("challenges", "Challenges", "The challenges faced by the persona.",
+                 "textarea", "Additional Details", "", false, true);
+        addField("thoughtsAndFeelings", "Thoughts and Feelings",
+                 "The persona's thoughts and feelings.",
+                 "textarea", "Additional Details", "", false, true);
+        addField("tasksAndActivities", "Tasks and Activities",
+                 "Tasks or activities relevant to the persona.",
+                 "textarea", "Additional Details", "", false, true);
+        addField("influencesAndSupports", "Influences and Supports",
+                 "The persona's social supports and influences.",
+                 "textarea", "Additional Details", "", false, true);
+        addField("socialHistory", "Social History", "The persona's social history.",
+                 "textarea", "Additional Details", "", false, true);
+        addField("culturalComponents", "Cultural Components",
+                 "Cultural aspects relevant to the persona.",
+                 "textarea", "Additional Details", "", false, true);
+        addField("emotionalWellbeing", "Emotional Wellbeing",
+                 "Details about the persona's emotional wellbeing.",
+                 "textarea", "Additional Details", "", false, true);
+        addField("socialDeterminantsOfHealth", "Social Determinants of Health",
+                 "Factors impacting the persona's health from a social perspective.",
+                 "textarea", "Additional Details", "", false, true);
+        addField("promptsAndSpecialInstructions", "Prompts and Special Instructions",
+                 "Special instructions or prompts related to the persona.",
+                 "textarea", "Additional Details", "", false, true);
+
+        // Wrap the field descriptions in an object so the frontend receives
+        // { "fields": [ ... ] } and can validate/render the response.
+        crow::json::wvalue schema;
+        schema["fields"] = std::move(fields);
+        return crow::response(200, std::move(schema));
+    });
+
     // -------------------------------------------------------------------------
     // POST /api/personas
     // Creates a new persona from the JSON body. Used by "New Persona".
@@ -265,8 +403,8 @@ int main() {
     // -------------------------------------------------------------------------
     CROW_ROUTE(app, "/api/personas").methods("POST"_method)
     ([&store](const crow::request& req) {
-    
-    	if (auto error = requireIdentity(req, true)) return std::move(*error);
+
+        if (auto error = requireIdentity(req, true)) return std::move(*error);
 
         auto body = crow::json::load(req.body);   // parse the raw text into JSON
         if (!body) return jsonError(400, "Invalid JSON");  // parsing failed
@@ -288,8 +426,8 @@ int main() {
     // -------------------------------------------------------------------------
     CROW_ROUTE(app, "/api/personas/<int>").methods("GET"_method)
     ([&store](const crow::request& req, int id) { // id comes from the <int> in the URL
-    
-    	if (auto error = requireIdentity(req, true)) return std::move(*error);
+
+        if (auto error = requireIdentity(req, true)) return std::move(*error);
 
         auto p = store.get(id);                   // a std::optional: the persona, or nothing
         if (!p) return jsonError(404, "Persona not found");
@@ -307,8 +445,8 @@ int main() {
     // -------------------------------------------------------------------------
     CROW_ROUTE(app, "/api/personas/<int>").methods("PUT"_method)
     ([&store](const crow::request& req, int id) {
-    
-    	if (auto error = requireIdentity(req, true)) return std::move(*error);
+
+        if (auto error = requireIdentity(req, true)) return std::move(*error);
 
         auto existing = store.get(id);            // the current version
         if (!existing) return jsonError(404, "Persona not found");
@@ -336,7 +474,7 @@ int main() {
     // -------------------------------------------------------------------------
     CROW_ROUTE(app, "/api/personas/<int>").methods("DELETE"_method)
     ([&store](const crow::request& req, int id) {
-        
+
         if (auto error = requireIdentity(req, true)) return std::move(*error);
 
         if (!store.remove(id)) return jsonError(404, "Persona not found");
@@ -351,9 +489,9 @@ int main() {
     // GET /api/learning-topics  -> all topics, in page order
     CROW_ROUTE(app, "/api/learning-topics").methods("GET"_method)
     ([&topics](const crow::request& req) {
-    
-    	if (auto error = requireIdentity(req, false)) return std::move(*error);
-        
+
+        if (auto error = requireIdentity(req, false)) return std::move(*error);
+
         std::vector<crow::json::wvalue> items;
         for (const auto& t : topics.list()) {
             items.push_back(toJson(t));
@@ -366,8 +504,9 @@ int main() {
     //   400  bad JSON, wrong type, or no title
     CROW_ROUTE(app, "/api/learning-topics").methods("POST"_method)
     ([&topics](const crow::request& req) {
-    
-    	if (auto error = requireIdentity(req, true)) return std::move(*error);
+
+        if (auto error = requireIdentity(req, true)) return std::move(*error);
+
         auto body = crow::json::load(req.body);
         if (!body) return jsonError(400, "Invalid JSON");
 
@@ -381,8 +520,9 @@ int main() {
     // GET /api/learning-topics/<id>  -> one topic
     CROW_ROUTE(app, "/api/learning-topics/<int>").methods("GET"_method)
     ([&topics](const crow::request& req, int id) {
-    
-    	if (auto error = requireIdentity(req, false)) return std::move(*error);
+
+        if (auto error = requireIdentity(req, false)) return std::move(*error);
+
         auto t = topics.get(id);
         if (!t) return jsonError(404, "Learning topic not found");
         return crow::response(200, toJson(*t));
@@ -391,8 +531,9 @@ int main() {
     // PUT /api/learning-topics/<id>  -> update; only the fields sent change
     CROW_ROUTE(app, "/api/learning-topics/<int>").methods("PUT"_method)
     ([&topics](const crow::request& req, int id) {
-    
-    	if (auto error = requireIdentity(req, true)) return std::move(*error);
+
+        if (auto error = requireIdentity(req, true)) return std::move(*error);
+
         auto existing = topics.get(id);
         if (!existing) return jsonError(404, "Learning topic not found");
 
@@ -410,13 +551,15 @@ int main() {
     // DELETE /api/learning-topics/<id>  -> 204 on success, no body
     CROW_ROUTE(app, "/api/learning-topics/<int>").methods("DELETE"_method)
     ([&topics](const crow::request& req, int id) {
-    
-    	if (auto error = requireIdentity(req, true)) return std::move(*error);
+
+        if (auto error = requireIdentity(req, true)) return std::move(*error);
+
         if (!topics.remove(id)) return jsonError(404, "Learning topic not found");
         return crow::response(204);
     });
 
-	CROW_ROUTE(app, "/api/auth/me").methods("GET"_method)
+    // GET /api/auth/me  -> who am I? (id and role of the logged-in user)
+    CROW_ROUTE(app, "/api/auth/me").methods("GET"_method)
     ([](const crow::request& req) {
         const auto user = currentUser(req);
         if (!user) {
@@ -434,11 +577,17 @@ int main() {
         response.set_header("Cache-Control", "no-store");
         return response;
     });
-	
-	RealtimeSetup realtime(assignments, store, scenarios);
-	registerRealtimeRoutes(app, realtime);
-	registerScenarioRoutes(app, scenarios);
-	
+
+    // =========================================================================
+    // Routes registered by other files
+    // =========================================================================
+    RealtimeSetup realtime(assignments, store, scenarios);
+    registerRealtimeRoutes(app, realtime);
+
+    // Scenario routes (list/schema/create/get/update/delete) live in
+    // scenario_routes.cpp.
+    registerScenarioRoutes(app, scenarios);
+
     // Educator Portal: assignments and session results (see educator_routes.cpp)
     registerEducatorRoutes(app, assignments, results, store, scenarios);
 
@@ -455,6 +604,6 @@ int main() {
     // PersonaStore needs its mutex). run() starts listening and doesn't return
     // until the server is stopped (Ctrl+C).
     app.port(port).multithreaded().run();
-	realtime.shutdown();
+    realtime.shutdown();
     curl_global_cleanup();
 }
