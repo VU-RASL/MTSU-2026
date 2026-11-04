@@ -30,3 +30,7 @@ add_executable(server
     src/realtime_routes.cpp
     )
 target_link_libraries(server PRIVATE Crow::Crow CURL::libcurl)
+
+if(WIN32)
+    target_link_libraries(server PRIVATE ws2_32 mswsock)
+endif()

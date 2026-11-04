@@ -4,34 +4,38 @@
 #include <cctype>
 #include <ctime>
 #include <limits>
+#include <optional>
 #include <stdexcept>
+#include <string>
 #include <utility>
+#include <vector>
 
-namespace { 
+namespace {
 
-const char* kColumns = "select=id,created_at,title,summary,setting,difficulty,"
-					   "learning_objectives,instructions,patient_situation,required_tasks,"
-					   "estimated_time";
-					   
+const char* const kColumns =
+    "select=id,created_at,title,summary,setting,difficulty,"
+    "learning_objectives,instructions,patient_situation,required_tasks,"
+    "estimated_time";
+
 const std::pair<const char*, std::string Scenario::*> kStrings[] = {
-	{"title", &Scenario::title},
-	{"summary", &Scenario::summary},
-	{"setting", &Scenario::setting},
-	{"difficulty", &Scenario::difficulty},
-	{"instructions", &Scenario::instructions},
-	{"patient_situation", &Scenario::patientSituation}
+    {"title", &Scenario::title},
+    {"summary", &Scenario::summary},
+    {"setting", &Scenario::setting},
+    {"difficulty", &Scenario::difficulty},
+    {"instructions", &Scenario::instructions},
+    {"patient_situation", &Scenario::patientSituation}
 };
 
 const std::pair<const char*, std::vector<std::string> Scenario::*> kLists[] = {
-	{"learning_objectives", &Scenario::learningObjectives},
-	{"required_tasks", &Scenario::requiredTasks}
+    {"learning_objectives", &Scenario::learningObjectives},
+    {"required_tasks", &Scenario::requiredTasks}
 };
 
 // read only the columns defined by the scenario table
 Scenario fromRow(const crow::json::rvalue& row) {
-	using crow::json::type;
-	using crow::json::num_type;
-	
+    using crow::json::type;
+    using crow::json::num_type;
+
     if (row.t() != type::Object || !row.has("id") ||
         !row.has("created_at") || row["id"].t() != type::Number ||
         (row["id"].nt() != num_type::Signed_integer &&
@@ -95,13 +99,14 @@ std::string toBody(const Scenario& scenario) {
     return row.dump();
 }
 
-// Helper function to convert a string to lowercase for case-insensitive comparisons.
 std::string toLower(std::string text) {
-    std::transform(text.begin(), text.end(), text.begin(),
-                   [](unsigned char c) { return static_cast<char>(std::tolower(c)); });
+    std::transform(text.begin(), text.end(), text.begin(), [](unsigned char c) {
+        return static_cast<char>(std::tolower(c));
+    });
     return text;
 }
-}  // namespace 
+
+}  // namespace
 
 
 // page by ID so a large DB can't hide scenarios
@@ -166,7 +171,11 @@ bool ScenarioStore::remove(int id) {
 
     std::time_t now = std::time(nullptr);
     std::tm utc{};
+#ifdef _WIN32
+    if (gmtime_s(&utc, &now) != 0) throw std::runtime_error("Could not read the current time");
+#else
     if (!gmtime_r(&now, &utc)) throw std::runtime_error("Could not read the current time");
+#endif
     char timestamp[32];
     if (!std::strftime(timestamp, sizeof(timestamp), "%Y-%m-%dT%H:%M:%SZ", &utc)) {
         throw std::runtime_error("Could not format the current time");
