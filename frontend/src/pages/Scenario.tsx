@@ -209,65 +209,68 @@ const Scenario: React.FC = () => {
     return (
         <>
             <Header />
-            <div className="content">
-                <div className="persona-creator">
-                    <h1 style={{ color: 'white' }}>Scenario Creator</h1>
+            <div className='persona-container'>
+                <div className="pcontent">
+                    <div className="persona-creator">
+                        <h1 style={{ color: 'white' }}>Scenario Creator</h1>
 
-                    {/* Display distinct feedback states above the generated form. */}
-                    {loading && <p>Loading form...</p>}
-                    {error && <p role="alert">{error}</p>}
-                    {success && <p role="status">{success}</p>}
+                        {/* Display distinct feedback states above the generated form. */}
+                        {loading && <p>Loading form...</p>}
+                        {error && <p role="alert">{error}</p>}
+                        {success && <p role="status">{success}</p>}
 
-                    {/* Do not show an empty/static form before its schema arrives. */}
-                    {schema && (
-                        <form onSubmit={handleSubmit}>
-                            {/* A schema entry creates one labeled input. Using
-                                the backend path as the key/ID keeps labels,
-                                state, and payload mapping tied to that field. */}
-                            {schema.fields.map((field) => (
-                                <div key={field.path} className="form-group">
-                                    <label htmlFor={field.path}>{field.label}</label>
-                                    {/* Textareas and inputs share the same state
-                                        model; the schema chooses which control
-                                        is rendered and whether it is required. */}
-                                    {field.type === 'textarea' ? (
-                                        <textarea
-                                            id={field.path}
-                                            required={field.required}
-                                            value={values[field.path] ?? ''}
-                                            onChange={(event) => setValues({
-                                                ...values,
-                                                [field.path]: event.target.value,
-                                            })}
-                                        />
-                                    ) : (
-                                        <input
-                                            id={field.path}
-                                            type={field.type}
-                                            required={field.required}
-                                            // Age uses integer steps to align
-                                            // browser input with API validation.
-                                            step={field.type === 'number' ? 1 : undefined}
-                                            value={values[field.path] ?? ''}
-                                            onChange={(event) => setValues({
-                                                ...values,
-                                                [field.path]: event.target.value,
-                                            })}
-                                        />
-                                    )}
-                                    {/* Explain how a list-valued textarea is
-                                        converted into an array on submission. */}
-                                    {field.multiple && <small>Enter one item per line.</small>}
-                                </div>
-                            ))}
-                            {/* Disable repeat submits while the POST is pending,
-                                and make the button label reflect that state. */}
-                            <button type="submit" disabled={submitting}>
-                                {submitting ? 'Creating...' : 'Create Scenario'}
-                            </button>
-                        </form>
-                    )}
+                        {/* Do not show an empty/static form before its schema arrives. */}
+                        {schema && (
+                            <form onSubmit={handleSubmit}>
+                                {/* A schema entry creates one labeled input. Using
+                                    the backend path as the key/ID keeps labels,
+                                    state, and payload mapping tied to that field. */}
+                                {schema.fields.map((field) => (
+                                    <div key={field.path} className="form-group">
+                                        <label htmlFor={field.path}>{field.label}</label>
+                                        {/* Textareas and inputs share the same state
+                                            model; the schema chooses which control
+                                            is rendered and whether it is required. */}
+                                        {field.type === 'textarea' ? (
+                                            <textarea
+                                                id={field.path}
+                                                required={field.required}
+                                                value={values[field.path] ?? ''}
+                                                onChange={(event) => setValues({
+                                                    ...values,
+                                                    [field.path]: event.target.value,
+                                                })}
+                                            />
+                                        ) : (
+                                            <input
+                                                id={field.path}
+                                                type={field.type}
+                                                required={field.required}
+                                                // Age uses integer steps to align
+                                                // browser input with API validation.
+                                                step={field.type === 'number' ? 1 : undefined}
+                                                value={values[field.path] ?? ''}
+                                                onChange={(event) => setValues({
+                                                    ...values,
+                                                    [field.path]: event.target.value,
+                                                })}
+                                            />
+                                        )}
+                                        {/* Explain how a list-valued textarea is
+                                            converted into an array on submission. */}
+                                        {field.multiple && <small>Enter one item per line.</small>}
+                                    </div>
+                                ))}
+                                {/* Disable repeat submits while the POST is pending,
+                                    and make the button label reflect that state. */}
+                                <button type="submit" disabled={submitting}>
+                                    {submitting ? 'Creating...' : 'Create Scenario'}
+                                </button>
+                            </form>
+                        )}
+                    </div>
                 </div>
+
             </div>
             <Footer />
         </>
