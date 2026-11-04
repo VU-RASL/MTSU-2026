@@ -5,8 +5,10 @@ export type Assignment = {
   id: number
   createdAt: string
   scenarioId: number
+  personaId: number | null
   studentId: string
   assignedBy: string
+  archived: boolean
   status: Status
 }
 
