@@ -1,6 +1,7 @@
 import { useNavigate } from 'react-router-dom'
 import PageLayout from '../components/PageLayout'
 import ModuleCard from '../components/ModuleCard'
+import AssignmentReview from '../components/AssignmentReview'
 import type { Module } from '../components/ModuleCard'
 import { useState } from 'react'
 
@@ -111,6 +112,8 @@ function handleAssign() {
     </button>
 </section>
 
+        <AssignmentReview />
+        
         <h2>Review Modules</h2>
         <div className="module-grid">
           {modules.map((module) => (
