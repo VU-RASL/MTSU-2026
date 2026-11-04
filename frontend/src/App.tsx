@@ -4,6 +4,7 @@ import PersonaCreator from './pages/PersonaCreator'
 import StudentPortal from './pages/StudentPortal'
 import Learning from './pages/Learning'
 import EducatorPortal from './pages/EducatorPortal'
+import EducatorPortalPrototype from './pages/EducatorPortalPrototype'
 import './App.css'
 import RTC from './pages/RTC'
 import Scenario from './pages/Scenario'
@@ -27,6 +28,7 @@ function App() {
           <Route path="/student-portal" element={<StudentPortal />} />
           <Route path="/learning" element={<Learning />} />
           <Route path="/educator-portal" element={<EducatorPortal />} />
+          <Route path="/educator-portal-prototype" element={<EducatorPortalPrototype />} />
           <Route path="/rtc" element={<RTC />} />
         </Routes>
       </Router>

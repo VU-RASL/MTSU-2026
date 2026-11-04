@@ -25,3 +25,13 @@ export const listAssignments = (filters?: { studentId?: string; status?: Status;
 // PUT /api/assignments/<id>  (students may only set "in_progress")
 export const startAssignment = (id: number) =>
   api<Assignment>(`/api/assignments/${id}`, jsonBody('PUT', { status: 'in_progress' }))
+
+// Educators create an assignment for a real student profile.
+// The backend validates the student's role and the referenced scenario.
+export const createAssignment = (scenarioId: number, studentId: string) =>
+  api<Assignment>('/api/assignments', jsonBody('POST', { scenarioId, studentId }))
+
+// Remove an assignment by ASSIGNMENT ID, not scenario ID.
+// Only delete test assignments you are authorized to remove.
+export const deleteAssignment = (assignmentId: number) =>
+  api<void>(`/api/assignments/${assignmentId}`, { method: 'DELETE' })
