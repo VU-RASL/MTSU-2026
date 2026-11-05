@@ -31,7 +31,7 @@ const Header: React.FC = () => {
                         <li className="header-nav-item"><a href="/scenario-creator">Create Scenario</a></li>
                         <li className="header-nav-item"><a href="/student-portal">Student Portal</a></li>
                         <li className="header-nav-item"><a href="/learning">Learning</a></li>
-                        <li className="header-nav-item"><a href="/educator-review">Educator Review</a></li>
+                        <li className="header-nav-item"><a href="/educator-portal">Educator Portal</a></li>
                         <li className="header-nav-item"><a href="/rtc">RTC</a></li>
                     </ul>
                 </nav>
