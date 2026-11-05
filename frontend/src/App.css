@@ -403,6 +403,7 @@
    Applies to the stable portal and prototype.
    ================================================== */
 
+.content:has(.educator-stable),
 .content:has(.educator-portal),
 .content:has(.educator-portal-prototype) {
     width: 100%;
@@ -541,4 +542,261 @@
     .educator-portal-prototype .assignment-fields {
         grid-template-columns: 1fr;
     }
+}
+
+
+/* ==================================================
+   Educator Portal Prototype
+   Module Creator / Class Management
+   ================================================== */
+
+.educator-portal-prototype {
+    width: 100%;
+    max-width: 1200px;
+    margin: 0 auto;
+    padding: 24px;
+    box-sizing: border-box;
+}
+
+/* Section panels */
+
+.educator-portal-prototype .module-assignment {
+    display: flex;
+    flex-direction: column;
+    gap: 20px;
+    padding: 28px;
+    margin: 24px 0;
+    background-color: #fff;
+    border: 1px solid #ccc;
+    border-radius: 12px;
+}
+
+.educator-portal-prototype .module-assignment h2 {
+    margin: 0;
+    color: #171717;
+}
+
+/* Override the global .content form styling */
+
+.content .educator-portal-prototype form {
+    display: flex;
+    flex-direction: column;
+    align-items: stretch;
+    gap: 20px;
+    width: 100%;
+    padding: 0;
+}
+
+/* Form field labels */
+
+.educator-portal-prototype .form-group {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    width: 100%;
+}
+
+.educator-portal-prototype .form-group label {
+    color: #222;
+    font-weight: 600;
+}
+
+/* Text inputs and dropdowns */
+
+.educator-portal-prototype .form-group input,
+.educator-portal-prototype .form-group select {
+    box-sizing: border-box;
+    width: 100%;
+    max-width: none;
+    padding: 12px 14px;
+    border: 1px solid var(--accent);
+    border-radius: 8px;
+    background-color: white;
+    color: #222;
+    font: inherit;
+}
+
+/* Gold action buttons */
+
+.content .educator-portal-prototype button {
+    width: fit-content;
+    flex: 0 0 auto;
+    align-self: flex-start;
+    padding: 12px 20px;
+    border: none;
+    border-radius: 8px;
+    background-color: var(--accent);
+    color: white;
+    font: inherit;
+    font-weight: 600;
+    cursor: pointer;
+}
+
+.content .educator-portal-prototype button:hover {
+    filter: brightness(0.92);
+}
+
+/* Created modules list */
+
+.educator-portal-prototype ul {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+}
+
+.educator-portal-prototype li {
+    padding: 14px 16px;
+    margin-bottom: 10px;
+    border: 1px solid #ddd;
+    border-radius: 8px;
+    background-color: #fafafa;
+    color: #222;
+}
+
+/* Smaller screens */
+
+@media (max-width: 600px) {
+    .educator-portal-prototype {
+        padding: 12px;
+    }
+
+    .educator-portal-prototype .module-assignment {
+        padding: 18px;
+    }
+
+    .content .educator-portal-prototype button {
+        width: 100%;
+    }
+}
+
+
+/* ============================================
+   Educator Portal Prototype — Class Management
+   ============================================ */
+
+.educator-portal-prototype .student-selection {
+  border: none;
+  padding: 0;
+  margin: 0;
+  min-width: 0;
+}
+
+.educator-portal-prototype .student-selection legend {
+  color: #222;
+  font-weight: 600;
+  margin-bottom: 16px;
+}
+
+.educator-portal-prototype .student-grid {
+  display: grid;
+  grid-template-columns: repeat(
+    auto-fit,
+    minmax(160px, 1fr)
+  );
+  gap: 12px;
+}
+
+.educator-portal-prototype .student-option {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 14px;
+  border: 1px solid #ddd;
+  border-radius: 8px;
+  background: #fafafa;
+  color: #222;
+  cursor: pointer;
+}
+
+/* Override the full-width input styles for checkboxes */
+
+.educator-portal-prototype .student-option input[type="checkbox"] {
+  width: 18px;
+  height: 18px;
+  flex: 0 0 auto;
+  margin: 0;
+  accent-color: var(--accent);
+}
+
+.educator-portal-prototype .student-option:has(input:checked) {
+  border-color: var(--accent);
+  background-color: var(--accent-bg);
+}
+
+.educator-portal-prototype .selection-count {
+  color: #666;
+  font-size: 14px;
+  margin: 0;
+}
+
+.educator-portal-prototype .class-error {
+  color: #b42318;
+  margin: 0;
+}
+
+.educator-portal-prototype .created-classes {
+  display: grid;
+  gap: 16px;
+}
+
+.educator-portal-prototype .class-card {
+  padding: 20px;
+  border: 1px solid #ddd;
+  border-radius: 10px;
+  background: #fafafa;
+}
+
+.educator-portal-prototype .class-card h3 {
+  margin: 0 0 8px;
+  color: #222;
+}
+
+.educator-portal-prototype .class-card p {
+  margin: 0 0 12px;
+  color: #666;
+}
+
+.educator-portal-prototype .class-card ul {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  list-style: none;
+  padding: 0;
+  margin: 0;
+}
+
+.educator-portal-prototype .class-card li {
+  margin: 0;
+  padding: 8px 12px;
+  border: 1px solid #ddd;
+  border-radius: 6px;
+  background-color: white;
+}
+
+@media (max-width: 600px) {
+  .educator-portal-prototype .student-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
+/* Course code and section layout */
+
+.educator-portal-prototype .class-fields {
+  display: grid;
+  grid-template-columns: repeat(
+    auto-fit,
+    minmax(min(100%, 240px), 1fr)
+  );
+  gap: 20px;
+  width: 100%;
+}
+
+.educator-portal-prototype .class-fields {
+  display: grid;
+  grid-template-columns: repeat(
+    auto-fit,
+    minmax(min(100%, 240px), 1fr)
+  );
+  gap: 20px;
+  width: 100%;
 }
