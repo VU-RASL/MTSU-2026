@@ -28,8 +28,21 @@ export const startAssignment = (id: number) =>
 
 // Educators create an assignment for a real student profile.
 // The backend validates the student's role and the referenced scenario.
-export const createAssignment = (scenarioId: number, studentId: string) =>
-  api<Assignment>('/api/assignments', jsonBody('POST', { scenarioId, studentId }))
+
+export const createAssignment = (
+  scenarioId: number,
+  personaId: number,
+  studentId: string
+) =>
+  api<Assignment>(
+    '/api/assignments',
+    jsonBody('POST', {
+      scenarioId,
+      personaId,
+      studentId
+    })
+  )
+
 
 // Remove an assignment by ASSIGNMENT ID, not scenario ID.
 // Only delete test assignments you are authorized to remove.
