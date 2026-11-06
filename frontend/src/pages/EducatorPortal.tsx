@@ -10,6 +10,7 @@ import {
   type Assignment,
 } from '../api/assignments'
 import { listScenarios, type Scenario } from '../api/scenarios'
+import { listPersonas, type Persona } from '../api/personas'
 import type { Status } from '../api/results'
 
 const statuses: Status[] = ['assigned', 'in_progress', 'completed', 'reviewed']
@@ -20,6 +21,8 @@ export default function EducatorPortal() {
   const [assignments, setAssignments] = useState<Assignment[]>([])
   const [studentId, setStudentId] = useState('')
   const [scenarioId, setScenarioId] = useState('')
+  const [personas, setPersonas] = useState<Persona[]>([])
+  const [personaId, setPersonaId] = useState('')
   const [filterStudentId, setFilterStudentId] = useState('')
   const [filterStatus, setFilterStatus] = useState<Status | ''>('')
   const [loading, setLoading] = useState(true)
@@ -35,36 +38,79 @@ export default function EducatorPortal() {
     setAssignments(rows)
   }, [])
 
-  useEffect(() => {
-    let active = true
-    Promise.all([listScenarios(), listAssignments()])
-      .then(([available, rows]) => {
-        if (!active) return
-        setScenarios(available)
-        setAssignments(rows)
-      })
-      .catch((cause: unknown) => {
-        if (active) setError(cause instanceof Error ? cause.message : 'Unable to load educator data')
-      })
-      .finally(() => { if (active) setLoading(false) })
-    return () => { active = false }
-  }, [])
+  
+useEffect(() => {
+  let active = true
+
+  Promise.all([
+    listScenarios(),
+    listPersonas(),
+    listAssignments()
+  ])
+    .then(([availableScenarios, availablePersonas, rows]) => {
+      if (!active) return
+
+      setScenarios(availableScenarios)
+      setPersonas(availablePersonas)
+      setAssignments(rows)
+    })
+    .catch((cause: unknown) => {
+      if (active) {
+        setError(
+          cause instanceof Error
+            ? cause.message
+            : 'Unable to load educator data'
+        )
+      }
+    })
+    .finally(() => {
+      if (active) setLoading(false)
+    })
+
+  return () => {
+    active = false
+  }
+}, [])
+
 
   async function handleAssign(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
     setError('')
     setNotice('')
-    const id = Number(scenarioId)
-    if (!Number.isSafeInteger(id) || id <= 0 || !studentId.trim()) {
-      setError('Choose a scenario and enter a valid student profile ID.')
-      return
-    }
+    
+const id = Number(scenarioId)
+const selectedPersonaId = Number(personaId)
+
+if (!Number.isSafeInteger(id) || id <= 0) {
+  setError('Please select a valid scenario.')
+  return
+}
+
+if (
+  !personaId ||
+  !Number.isSafeInteger(selectedPersonaId) ||
+  selectedPersonaId <= 0
+) {
+  setError('Please select a valid persona.')
+  return
+}
+
+if (!/^[1-9]\d*$/.test(studentId.trim())) {
+  setError('Please enter a valid student profile ID.')
+  return
+}
+
     setSaving(true)
     try {
-      await createAssignment(id, studentId.trim())
+      await createAssignment(
+      id,
+      selectedPersonaId,
+      studentId.trim()
+    )
       setNotice('Assignment created successfully.')
       setStudentId('')
       setScenarioId('')
+      setPersonaId('')
       await refresh(filterStudentId, filterStatus)
     } catch (cause) {
       setError(cause instanceof Error ? cause.message : 'Unable to create assignment')
@@ -134,7 +180,42 @@ export default function EducatorPortal() {
                 ))}
               </select>
             </div>
-            <button type="submit" disabled={saving || loading || scenarios.length === 0}>Assign scenario</button>
+            
+          <div className="form-group">
+           <label htmlFor="educator-persona">Persona</label>
+
+           <select
+              id="educator-persona"
+              value={personaId}
+              onChange={event => setPersonaId(event.target.value)}
+              required
+          >
+    <option value="">Choose a persona</option>
+
+    {personas.map(persona => (
+      <option key={persona.id} value={persona.id}>
+        {persona.title || persona.identity?.name || `Persona #${persona.id}`}
+      </option>
+    ))}
+  </select>
+</div>
+
+            
+<button
+  type="submit"
+  disabled={
+    saving ||
+    loading ||
+    scenarios.length === 0 ||
+    personas.length === 0 ||
+    !scenarioId ||
+    !personaId ||
+    !studentId.trim()
+  }
+>
+  {saving ? 'Assigning...' : 'Assign scenario'}
+</button>
+
           </form>
           <p className="educator-stable-note">Only real student profiles can receive assignments. This stable page assigns scenarios individually; class-wide modules are part of the separate prototype.</p>
         </section>
