@@ -399,404 +399,101 @@
 
 
 /* ==================================================
-   Educator Portal — Shared Layout
-   Applies to the stable portal and prototype.
+   Educator Portal — unified page
+   Module & class management, accordion, modal, API
+   Kept in the shared App.css by team convention.
    ================================================== */
 
-.content:has(.educator-stable),
-.content:has(.educator-portal),
-.content:has(.educator-portal-prototype) {
-    width: 100%;
-    max-width: none;
-    margin: 0;
-}
-
-.educator-portal,
-.educator-portal-prototype {
-    box-sizing: border-box;
-    width: 100%;
-    max-width: 1200px;
-    margin: 0 auto;
-    padding: 24px;
-    color: #171717;
-}
-
-.educator-portal h1,
-.educator-portal-prototype h1 {
-    font-size: 40px;
-    margin-bottom: 16px;
-    color: var(--text-h);
-}
-
-.educator-portal h2,
-.educator-portal-prototype h2 {
-    font-size: 26px;
-    color: #171717;
-}
-
-/* Override the global full-width button styling */
-
-.educator-portal button,
-.educator-portal-prototype button {
-    width: auto;
-    flex: 0 0 auto;
-    padding: 10px 18px;
-    border: none;
-    border-radius: 8px;
-    background-color: var(--accent);
-    color: white;
-    font: inherit;
-    cursor: pointer;
-}
-
-.educator-portal button:hover,
-.educator-portal-prototype button:hover {
-    filter: brightness(0.92);
-}
-
-.educator-portal button:disabled,
-.educator-portal-prototype button:disabled {
-    opacity: 0.55;
-    cursor: not-allowed;
-}
-
-/* Forms and dropdowns */
-
-.educator-portal .form-group label,
-.educator-portal-prototype .form-group label {
-    color: #222;
-}
-
-.educator-portal .form-group input,
-.educator-portal .form-group select,
-.educator-portal-prototype .form-group input,
-.educator-portal-prototype .form-group select {
-    box-sizing: border-box;
-    width: 100%;
-    max-width: none;
-    padding: 12px;
-    border: 1px solid var(--accent);
-    border-radius: 8px;
-    background-color: white;
-    color: #222;
-    font: inherit;
-}
-
-/* Panels and assignment areas */
-
-.educator-portal .module-assignment,
-.educator-portal-prototype .module-assignment {
-    background-color: white;
-    border: 1px solid #ccc;
-    border-radius: 12px;
-    padding: 24px;
-    margin: 24px 0;
-}
-
-.educator-portal .assignment-table-wrapper {
-    width: 100%;
-    overflow-x: auto;
-}
-
-.educator-portal .assignment-table {
-    width: 100%;
-    border-collapse: collapse;
-    text-align: left;
-}
-
-.educator-portal .assignment-table th,
-.educator-portal .assignment-table td {
-    padding: 12px;
-    border-bottom: 1px solid #ddd;
-    color: #222;
-}
-
-.educator-portal .assignment-table th {
-    background-color: #f4f4f4;
-}
-
-/* Preserve readable module cards */
-
-.educator-portal .module-card,
-.educator-portal-prototype .module-card {
-    background-color: white;
-    color: #222;
-    border: 1px solid #ccc;
-    border-radius: 10px;
-}
-
-.educator-portal .module-card h3,
-.educator-portal-prototype .module-card h3 {
-    color: #171717;
-}
-
-/* Responsive layout */
-
-@media (max-width: 600px) {
-    .educator-portal,
-    .educator-portal-prototype {
-        padding: 12px;
-    }
-
-    .educator-portal .assignment-fields,
-    .educator-portal-prototype .assignment-fields {
-        grid-template-columns: 1fr;
-    }
-}
+/* Styles scoped to the combined educator page. Other VERA pages are unaffected. */
+.content:has(.educator-unified) { width: 100%; max-width: none; margin: 0; }
+.educator-unified { width: min(100%, 1200px); box-sizing: border-box; margin: 0 auto; padding: 24px; color: #1c1b1b; }
+.educator-unified h1 { text-align: center; color: #17151b; font-size: clamp(2rem,4vw,3rem); margin: 8px 0 12px; }
+.educator-unified h2 { color: #181818; font-size: 1.6rem; margin: 0 0 12px; }
+.educator-lead { color: #71788b; margin-bottom: 28px; }
+.educator-panel { background: white; border: 1px solid #d7d7d7; border-radius: 14px; padding: 24px; margin: 22px 0; }
+.educator-panel p { margin: 8px 0 16px; }
+.educator-actions { display: flex; flex-wrap: wrap; gap: 12px; align-items: center; margin: 16px 0; }
+.content .educator-unified button, .educator-link-button, .educator-modal button { flex: 0 0 auto; width: auto; border: none; background: var(--accent,#cfae70); color: white; border-radius: 8px; padding: 11px 18px; font: inherit; cursor: pointer; text-decoration: none; display: inline-flex; align-items: center; justify-content: center; }
+.content .educator-unified button:hover, .educator-link-button:hover, .educator-modal button:hover { filter: brightness(.94); }
+.content .educator-unified button:disabled { opacity: .5; cursor: not-allowed; }
+.educator-link-button { background: #262626; }
+.educator-help { color: #747b87; font-size: .9rem; }
+.educator-message { color: #166534; }
+.educator-api-error { color: #b42318; }
+.educator-record { border: 1px solid #ddd; border-radius: 10px; background: #fafafa; margin: 12px 0; overflow: hidden; }
+.educator-record-header { display: flex; gap: 10px; align-items: stretch; padding: 10px; }
+.content .educator-unified .educator-accordion { flex: 1 1 auto; justify-content: space-between; gap: 10px; text-align: left; background: transparent; color: #252525; font-weight: 600; padding: 12px; }
+.educator-accordion small { color: #687383; font-weight: 400; }
+.educator-record-body { padding: 18px; background: #fff; border-top: 1px solid #ddd; color: #222; }
+.educator-record-body p { margin: 4px 0 12px; }
+.content .educator-unified .educator-danger { background: #9c3232; }
+.educator-chips { display: flex; gap: 8px; flex-wrap: wrap; }
+.educator-chips span { background: #fff; border: 1px solid #ddd; padding: 8px 12px; border-radius: 8px; }
+.content .educator-unified .educator-form, .educator-modal .educator-form { display: flex; flex-direction: column; gap: 16px; padding: 0; align-items: stretch; width: 100%; }
+.educator-form-grid { display: grid; grid-template-columns: repeat(auto-fit,minmax(min(100%,240px),1fr)); gap: 16px; width: 100%; margin: 14px 0; }
+.educator-form label, .educator-form-grid label { display: flex; flex-direction: column; gap: 8px; color: #222; font-weight: 600; }
+.educator-form input:not([type=checkbox]), .educator-form select, .educator-table select { display: block; width: 100%; min-width: 0; box-sizing: border-box; border: 1px solid #d1af72; background: #fff; color: #222; padding: 12px; border-radius: 8px; font: inherit; }
+.educator-form button[type=submit] { align-self: flex-start; }
+.educator-scroll { max-width: 100%; overflow-x: auto; }
+.educator-table { width: 100%; border-collapse: collapse; text-align: left; margin: 15px 0; }
+.educator-table td, .educator-table th { padding: 11px; border-bottom: 1px solid #ddd; color: #222; }
+.educator-table th { background: #f5f5f5; }
+.educator-table select { min-width: 135px; }
+.educator-unified details { padding: 15px 0; border-top: 1px solid #ddd; }
+.educator-unified summary { cursor: pointer; color: #222; font-weight: 600; }
+.educator-card-grid { display: grid; gap: 16px; grid-template-columns: repeat(auto-fit,minmax(min(100%,240px),1fr)); }
+.educator-card-grid article { border: 1px solid #ddd; border-radius: 10px; }
+.educator-modal-backdrop { position: fixed; inset: 0; z-index: 999; display: flex; align-items: center; justify-content: center; background: rgba(0,0,0,.55); backdrop-filter: blur(5px); padding: 20px; }
+.educator-modal { background: #fff; color: #222; border-radius: 14px; padding: 26px; width: min(100%,650px); max-height: 88vh; overflow-y: auto; box-shadow: 0 18px 60px rgba(0,0,0,.3); box-sizing: border-box; }
+.educator-modal-heading { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 20px; }
+.educator-modal-heading h2 { margin: 0; color: #222; }
+.educator-modal .educator-close, .educator-modal .educator-cancel { background: #eee; color: #222; }
+.educator-modal .educator-close { font-size: 1.5rem; padding: 4px 13px; }
+.educator-students { border: 0; margin: 0; padding: 0; }
+.educator-students legend { color: #222; font-weight: 600; margin-bottom: 12px; }
+.educator-student-grid { display: grid; grid-template-columns: repeat(auto-fit,minmax(125px,1fr)); gap: 10px; }
+.educator-student-grid label { display: flex; flex-direction: row; align-items: center; gap: 8px; background: #fafafa; border: 1px solid #ddd; padding: 12px; border-radius: 9px; font-weight: 400; }
+.educator-student-grid input[type=checkbox] { width: 18px; height: 18px; flex: 0 0 auto; accent-color: var(--accent,#cfae70); }
+.educator-student-grid label:has(input:checked) { border-color: #d1af72; background: #f5e4bb; }
+@media(max-width:600px){ .educator-unified { padding: 12px; } .educator-panel,.educator-modal { padding: 16px; } .educator-record-header { flex-wrap: wrap; } }
 
 
-/* ==================================================
-   Educator Portal Prototype
-   Module Creator / Class Management
-   ================================================== */
-
-.educator-portal-prototype {
-    width: 100%;
-    max-width: 1200px;
-    margin: 0 auto;
-    padding: 24px;
-    box-sizing: border-box;
-}
-
-/* Section panels */
-
-.educator-portal-prototype .module-assignment {
-    display: flex;
-    flex-direction: column;
-    gap: 20px;
-    padding: 28px;
-    margin: 24px 0;
-    background-color: #fff;
-    border: 1px solid #ccc;
-    border-radius: 12px;
-}
-
-.educator-portal-prototype .module-assignment h2 {
-    margin: 0;
-    color: #171717;
-}
-
-/* Override the global .content form styling */
-
-.content .educator-portal-prototype form {
-    display: flex;
-    flex-direction: column;
-    align-items: stretch;
-    gap: 20px;
-    width: 100%;
-    padding: 0;
-}
-
-/* Form field labels */
-
-.educator-portal-prototype .form-group {
-    display: flex;
-    flex-direction: column;
-    gap: 8px;
-    width: 100%;
-}
-
-.educator-portal-prototype .form-group label {
-    color: #222;
-    font-weight: 600;
-}
-
-/* Text inputs and dropdowns */
-
-.educator-portal-prototype .form-group input,
-.educator-portal-prototype .form-group select {
-    box-sizing: border-box;
-    width: 100%;
-    max-width: none;
-    padding: 12px 14px;
-    border: 1px solid var(--accent);
-    border-radius: 8px;
-    background-color: white;
-    color: #222;
-    font: inherit;
-}
-
-/* Gold action buttons */
-
-.content .educator-portal-prototype button {
-    width: fit-content;
-    flex: 0 0 auto;
-    align-self: flex-start;
-    padding: 12px 20px;
-    border: none;
-    border-radius: 8px;
-    background-color: var(--accent);
-    color: white;
-    font: inherit;
-    font-weight: 600;
-    cursor: pointer;
-}
-
-.content .educator-portal-prototype button:hover {
-    filter: brightness(0.92);
-}
-
-/* Created modules list */
-
-.educator-portal-prototype ul {
-    list-style: none;
-    margin: 0;
-    padding: 0;
-}
-
-.educator-portal-prototype li {
-    padding: 14px 16px;
-    margin-bottom: 10px;
-    border: 1px solid #ddd;
-    border-radius: 8px;
-    background-color: #fafafa;
-    color: #222;
-}
-
-/* Smaller screens */
-
-@media (max-width: 600px) {
-    .educator-portal-prototype {
-        padding: 12px;
-    }
-
-    .educator-portal-prototype .module-assignment {
-        padding: 18px;
-    }
-
-    .content .educator-portal-prototype button {
-        width: 100%;
-    }
-}
-
-
-/* ============================================
-   Educator Portal Prototype — Class Management
-   ============================================ */
-
-.educator-portal-prototype .student-selection {
-  border: none;
+/* Collapsible created-class and created-module sections */
+.educator-unified details.educator-section-fold {
   padding: 0;
-  margin: 0;
-  min-width: 0;
+  border: 1px solid #d7d7d7;
+  overflow: hidden;
 }
-
-.educator-portal-prototype .student-selection legend {
-  color: #222;
-  font-weight: 600;
-  margin-bottom: 16px;
-}
-
-.educator-portal-prototype .student-grid {
-  display: grid;
-  grid-template-columns: repeat(
-    auto-fit,
-    minmax(160px, 1fr)
-  );
-  gap: 12px;
-}
-
-.educator-portal-prototype .student-option {
+.educator-unified .educator-section-summary {
   display: flex;
   align-items: center;
-  gap: 10px;
-  padding: 14px;
-  border: 1px solid #ddd;
-  border-radius: 8px;
-  background: #fafafa;
-  color: #222;
-  cursor: pointer;
-}
-
-/* Override the full-width input styles for checkboxes */
-
-.educator-portal-prototype .student-option input[type="checkbox"] {
-  width: 18px;
-  height: 18px;
-  flex: 0 0 auto;
-  margin: 0;
-  accent-color: var(--accent);
-}
-
-.educator-portal-prototype .student-option:has(input:checked) {
-  border-color: var(--accent);
-  background-color: var(--accent-bg);
-}
-
-.educator-portal-prototype .selection-count {
-  color: #666;
-  font-size: 14px;
-  margin: 0;
-}
-
-.educator-portal-prototype .class-error {
-  color: #b42318;
-  margin: 0;
-}
-
-.educator-portal-prototype .created-classes {
-  display: grid;
+  justify-content: space-between;
   gap: 16px;
-}
-
-.educator-portal-prototype .class-card {
-  padding: 20px;
-  border: 1px solid #ddd;
-  border-radius: 10px;
-  background: #fafafa;
-}
-
-.educator-portal-prototype .class-card h3 {
-  margin: 0 0 8px;
-  color: #222;
-}
-
-.educator-portal-prototype .class-card p {
-  margin: 0 0 12px;
-  color: #666;
-}
-
-.educator-portal-prototype .class-card ul {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 8px;
+  padding: 22px 26px;
+  font-size: 1.6rem;
+  font-weight: 600;
+  cursor: pointer;
   list-style: none;
-  padding: 0;
-  margin: 0;
 }
-
-.educator-portal-prototype .class-card li {
-  margin: 0;
-  padding: 8px 12px;
-  border: 1px solid #ddd;
-  border-radius: 6px;
-  background-color: white;
+.educator-unified .educator-section-summary::-webkit-details-marker { display: none; }
+.educator-unified .educator-section-summary::after {
+  content: "▸";
+  font-size: 1.2rem;
+  margin-left: 4px;
+  color: #655532;
+  order: 3;
 }
-
+.educator-unified details[open] > .educator-section-summary::after { content: "▾"; }
+.educator-unified .educator-section-meta {
+  margin-left: auto;
+  font-size: .9rem;
+  font-weight: 400;
+  color: #687383;
+}
+.educator-unified .educator-section-summary:hover { background: #faf8f3; }
+.educator-unified .educator-section-summary:focus-visible { outline: 3px solid var(--accent, #cfae70); outline-offset: -3px; }
+.educator-unified .educator-section-body { padding: 0 26px 24px; }
 @media (max-width: 600px) {
-  .educator-portal-prototype .student-grid {
-    grid-template-columns: 1fr;
-  }
-}
-
-/* Course code and section layout */
-
-.educator-portal-prototype .class-fields {
-  display: grid;
-  grid-template-columns: repeat(
-    auto-fit,
-    minmax(min(100%, 240px), 1fr)
-  );
-  gap: 20px;
-  width: 100%;
-}
-
-.educator-portal-prototype .class-fields {
-  display: grid;
-  grid-template-columns: repeat(
-    auto-fit,
-    minmax(min(100%, 240px), 1fr)
-  );
-  gap: 20px;
-  width: 100%;
+  .educator-unified .educator-section-summary { padding: 16px; font-size: 1.3rem; }
+  .educator-unified .educator-section-body { padding: 0 16px 16px; }
 }
