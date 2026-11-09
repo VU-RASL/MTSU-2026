@@ -1,6 +1,7 @@
 import React, { useCallback, useEffect, useState } from 'react'
 import Footer from '../components/Footer'
 import Header from '../components/Header'
+import { api } from '../api/http'
 
 // These are the input kinds the backend schema currently supports. Keeping
 // this as a union lets TypeScript catch a schema-rendering case that has not
@@ -90,19 +91,6 @@ function isPersona(value: unknown): value is JsonObject {
         && typeof value.title === 'string'
 }
 
-async function getResponseError(response: Response, fallback: string): Promise<string> {
-    try {
-        const result: unknown = await response.json()
-        if (isObject(result) && typeof result.error === 'string') {
-            return result.error
-        }
-    } catch {
-        // Use the status-based message if the server response is not JSON.
-    }
-
-    return `${fallback} (${response.status})`
-}
-
 // Place a value at a dot-separated path in the nested JSON object.
 // Example: path "identity.age", value 42 becomes { identity: { age: 42 } }.
 // This makes the generated request use the same nested structure expected by
@@ -190,12 +178,7 @@ const PersonaCreator: React.FC = () => {
         setListLoading(true)
         setListError('')
         try {
-            const response = await fetch('/api/personas')
-            if (!response.ok) {
-                throw new Error(await getResponseError(response, 'Could not load personas'))
-            }
-
-            const data: unknown = await response.json()
+            const data = await api<unknown>('/api/personas')
             if (!isPersonaList(data)) {
                 throw new Error('The backend returned an invalid persona list')
             }
@@ -211,13 +194,8 @@ const PersonaCreator: React.FC = () => {
     // we will also error check for pretty much anything that could go wrong with the fetch and will display it to the user
     useEffect(() => {
         async function loadSchema() {
-            const response = await fetch('/api/personas/schema')
-            if (!response.ok) {
-                throw new Error(`Could not load the persona form (${response.status})`)
-            }
-
             // Parse as unknown and validate before storing it as FormSchema.
-            const data: unknown = await response.json()
+            const data = await api<unknown>('/api/personas/schema')
             if (!isFormSchema(data)) {
                 throw new Error('The backend returned an invalid persona form schema')
             }
@@ -245,12 +223,7 @@ const PersonaCreator: React.FC = () => {
         setSuccess('')
         setLoadingPersonaId(persona.id)
         try {
-            const response = await fetch(`/api/personas/${persona.id}`)
-            if (!response.ok) {
-                throw new Error(await getResponseError(response, 'Could not load persona'))
-            }
-
-            const result: unknown = await response.json()
+            const result = await api<unknown>(`/api/personas/${persona.id}`)
             if (!isPersona(result) || result.id !== persona.id) {
                 throw new Error('The backend returned invalid persona data')
             }
@@ -273,10 +246,7 @@ const PersonaCreator: React.FC = () => {
         setSuccess('')
         setDeletingPersonaId(persona.id)
         try {
-            const response = await fetch(`/api/personas/${persona.id}`, { method: 'DELETE' })
-            if (!response.ok) {
-                throw new Error(await getResponseError(response, 'Could not delete persona'))
-            }
+            await api<void>(`/api/personas/${persona.id}`, { method: 'DELETE' })
 
             setPersonas((current) => current.filter((item) => item.id !== persona.id))
             if (editingPersonaId === persona.id) {
@@ -359,7 +329,7 @@ const PersonaCreator: React.FC = () => {
         setSubmitting(true)
         try {
             // POST creates a persona; PUT updates the selected persona.
-            const response = await fetch(
+            await api<unknown>(
                 editingPersonaId === null ? '/api/personas' : `/api/personas/${editingPersonaId}`,
                 {
                     method: editingPersonaId === null ? 'POST' : 'PUT',
@@ -367,15 +337,6 @@ const PersonaCreator: React.FC = () => {
                     body: JSON.stringify(payload),
                 },
             )
-
-            // The backend returns JSON on both success and API errors; the
-            // error response includes an "error" message when available.
-            if (!response.ok) {
-                throw new Error(await getResponseError(
-                    response,
-                    editingPersonaId === null ? 'Could not create persona' : 'Could not update persona',
-                ))
-            }
 
             // The server-generated id/date remain server-side.
             setValues({})

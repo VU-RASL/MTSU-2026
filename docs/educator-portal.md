@@ -130,31 +130,24 @@ sequenceDiagram
 
 ---
 
-## Users and login (temporary)
+## Users and login
 
 Users are in the `profiles` table (`id bigint`, `name`, `email`, `role` = `student` | `educator` | `admin`). **Admins can do everything educators can.**
 
-All the routes ask one function, `currentUser(req)` in `backend/src/auth.cpp`, who is calling. There's no sign-in yet, so it works like this:
+The frontend registers and signs in with Supabase email/password authentication. Registration lets a user request either the `student` or `educator` role. Supabase stores that choice as signup `user_metadata.requested_role`.
 
-1. It takes the caller's profile id from the `X-User-Id` header. If that header is missing, it uses `DEV_USER_ID` from the root `.env`.
-2. It looks that id up in `profiles` and **takes the role from the table**. The request can't choose its own role.
-3. If the id isn't in `profiles`, the request gets a 401.
+For protected API requests, the frontend sends the Supabase access token as a bearer token. `currentUser(req)` in `backend/src/auth.cpp` asks Supabase Auth to validate it, then looks up the user's profile. On first use, the backend creates a profile using the verified account's requested role, accepting only `student` or `educator`; missing or other values become `student`. Signup cannot create an `admin`.
 
-Creating an assignment also checks that `studentId` is a profile with the role `student`. Otherwise it returns 400.
-
-So the current frontend works with no changes: set `DEV_USER_ID` to an educator's id in `.env`. To act as a student while testing, send `X-User-Id: <a student's id>`.
+The profile role is authoritative after profile creation; later changes to signup metadata do not change it. Creating an assignment also checks that `studentId` is a profile with the role `student`. Otherwise it returns 400.
 
 ```mermaid
 flowchart LR
     R[request] --> C["currentUser(req)<br/>auth.cpp"]
-    C -->|today| H["X-User-Id header<br/>or DEV_USER_ID"]
-    C -->|later| T[verify sign-in token]
-    H --> P[(profiles: role)]
-    T --> P
+    C --> T["verify Supabase bearer token"]
+    T --> M["read signup requested_role<br/>only for a new profile"]
+    M --> P[(profiles: role)]
     P --> Routes[educator_routes.cpp<br/>role checks]
 ```
-
-**Before real users:** anyone can send someone else's id, so this is for development only. When sign-in exists, only the part of `currentUser()` that finds the id changes. It reads and verifies a token instead of the header.
 
 ---
 

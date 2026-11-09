@@ -1,7 +1,63 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
+import { getCurrentUser } from '../api/auth'
+import type { CurrentUser } from '../api/auth'
 
-const Header: React.FC = () => {
+type HeaderProps = {
+    variant?: 'application' | 'public'
+}
+
+const Header: React.FC<HeaderProps> = ({ variant = 'application' }) => {
     const [isMenuOpen, setIsMenuOpen] = useState(false)
+    const [user, setUser] = useState<CurrentUser | null>(null)
+    const [loadingUser, setLoadingUser] = useState(variant !== 'public')
+    const [userError, setUserError] = useState('')
+
+    useEffect(() => {
+        if (variant === 'public') return
+
+        let isActive = true
+        getCurrentUser()
+            .then((currentUser) => {
+                if (isActive) setUser(currentUser)
+            })
+            .catch((cause: unknown) => {
+                if (isActive) {
+                    setUserError(cause instanceof Error ? cause.message : 'Could not load user role')
+                }
+            })
+            .finally(() => {
+                if (isActive) setLoadingUser(false)
+            })
+
+        return () => {
+            isActive = false
+        }
+    }, [variant])
+
+    const links = variant === 'public'
+        ? [
+            { label: 'Login', href: '/' },
+            { label: 'Register', href: '/register' },
+        ]
+        : user?.role === 'student'
+            ? [
+                { label: 'Home', href: '/home' },
+                { label: 'Learning', href: '/learning' },
+                { label: 'Student Portal', href: '/student-portal' },
+            ]
+            : user?.role === 'educator' || user?.role === 'admin'
+                ? [
+                    { label: 'Home', href: '/home' },
+                    { label: 'Educator Portal', href: '/educator-portal' },
+                    { label: 'Learning', href: '/learning' },
+                    { label: 'Create Persona', href: '/persona-creator' },
+                    { label: 'Create Scenario', href: '/scenario-creator' },
+                    { label: 'RTC', href: '/rtc' },
+                ]
+                : [
+                    { label: 'Login', href: '/' },
+                    { label: 'Register', href: '/register' },
+                ]
 
     return (
         <header className="header">
@@ -25,14 +81,19 @@ const Header: React.FC = () => {
                     aria-label="Main navigation"
                 >
                     <ul className="header-nav-list">
-                        <li className="header-nav-item"><a href="/">login</a></li>
-                        <li className="header-nav-item"><a href="/home">Home</a></li>
-                        <li className="header-nav-item"><a href="/persona-creator">Create Persona</a></li>
-                        <li className="header-nav-item"><a href="/scenario-creator">Create Scenario</a></li>
-                        <li className="header-nav-item"><a href="/student-portal">Student Portal</a></li>
-                        <li className="header-nav-item"><a href="/learning">Learning</a></li>
-                        <li className="header-nav-item"><a href="/educator-portal">Educator Portal</a></li>
-                        <li className="header-nav-item"><a href="/rtc">RTC</a></li>
+                        {loadingUser && variant !== 'public' && (
+                            <li className="header-nav-item" role="status">Loading navigation…</li>
+                        )}
+                        {!loadingUser && links.map((link) => (
+                            <li className="header-nav-item" key={link.href}>
+                                <a href={link.href}>{link.label}</a>
+                            </li>
+                        ))}
+                        {userError && (
+                            <li className="header-nav-item" role="alert">
+                                Could not load role-based navigation: {userError}
+                            </li>
+                        )}
                     </ul>
                 </nav>
             </div>

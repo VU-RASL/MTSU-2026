@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from 'react'
 import Footer from '../components/Footer'
 import Header from '../components/Header'
+import { api } from '../api/http'
 
 // These are the input kinds the backend schema currently supports. Keeping
 // this as a union lets TypeScript catch a schema-rendering case that has not
@@ -103,13 +104,8 @@ const Scenario: React.FC = () => {
     // we will also error check for pretty much anything that could go wrong with the fetch and will display it to the user
     useEffect(() => {
         async function loadSchema() {
-            const response = await fetch('/api/scenarios/schema')
-            if (!response.ok) {
-                throw new Error(`Could not load the scenario form (${response.status})`)
-            }
-
             // Parse as unknown and validate before storing it as FormSchema.
-            const data: unknown = await response.json()
+            const data = await api<unknown>('/api/scenarios/schema')
             if (!isFormSchema(data)) {
                 throw new Error('The backend returned an invalid scenario form schema')
             }
@@ -178,21 +174,11 @@ const Scenario: React.FC = () => {
         try {
             // POST creates a new scenario. JSON.stringify serializes the nested
             // payload, and Content-Type tells Crow to expect JSON in the body.
-            const response = await fetch('/api/scenarios', {
+            await api<unknown>('/api/scenarios', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify(payload),
             })
-
-            // The backend returns JSON on both success and API errors; the
-            // error response includes an "error" message when available.
-            const result: unknown = await response.json()
-            if (!response.ok) {
-                const message = isObject(result) && typeof result.error === 'string'
-                    ? result.error
-                    : `Could not create scenario (${response.status})`
-                throw new Error(message)
-            }
 
             // Clear entered values only after successful creation and give the
             // user confirmation. The server-generated id/date remain server-side.

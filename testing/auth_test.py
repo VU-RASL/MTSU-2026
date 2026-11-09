@@ -12,6 +12,9 @@ if not project.startswith("https://"):
 publishable_key = getpass.getpass("Supabase publishable key: ").strip()
 email = input("Fresh test account email: ").strip()
 password = getpass.getpass("Test account password: ")
+expected_role = input("Expected profile role (student or educator): ").strip()
+if expected_role not in ("student", "educator"):
+    raise SystemExit("Expected profile role must be student or educator.")
 
 login_request = urllib.request.Request(
     project + "/auth/v1/token?grant_type=password",
@@ -80,14 +83,16 @@ for number, status, profile in results:
 
     profile_ids.add(profile_id)
 
-    if profile.get("role") != "student":
+    if profile.get("role") != expected_role:
         passed = False
 
 if not passed or len(profile_ids) != 1:
     raise SystemExit(
-        "FAIL: all requests must return HTTP 200 and the same student profile."
+        "FAIL: all requests must return HTTP 200 and the same profile with role "
+        + expected_role
+        + "."
     )
 
-print("PASS: all eight requests returned the same student profile.")
+print("PASS: all eight requests returned the same " + expected_role + " profile.")
 print("Application profile ID:", next(iter(profile_ids)))
 print("Now confirm Supabase contains exactly one profile for the UUID above.")

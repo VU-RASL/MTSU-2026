@@ -67,6 +67,9 @@ services:
     environment:
       # Vite sends /api requests to the backend service.
       API_PROXY_TARGET: *api-proxy-target
+      # Browser authentication uses the public Supabase project settings.
+      VITE_SUPABASE_URL: "${VITE_SUPABASE_URL:?VITE_SUPABASE_URL is required}"
+      VITE_SUPABASE_PUBLISHABLE_KEY: "${VITE_SUPABASE_PUBLISHABLE_KEY:?VITE_SUPABASE_PUBLISHABLE_KEY is required}"
     # Publish Vite's port on your computer.
     ports:
       # Map the customizable browser port to Vite's fixed internal port.
