@@ -1,4 +1,4 @@
-/*header and footer styles */
+/* header and footer styles */
 .header {
   position: relative;
   background-color: var(--header-bg);
@@ -99,8 +99,22 @@
   border-top: 4px solid var(--header-text);
   width: 100%;
   box-sizing: border-box;
-
 }
+
+/* ==================================================
+   Base Page Layout (.content)
+   Default container for all standard pages in PageLayout
+   ================================================== */
+.content {
+  box-sizing: border-box;
+  width: 100%;
+  flex: 1 1 auto;
+  padding: 24px;
+  background: transparent;
+  border: none;
+  margin: 0 auto;
+}
+
 /* home styles */
 .home-container {
   display: flex;
@@ -109,13 +123,6 @@
   justify-content: center;
   width: 100%;
   min-height: 100vh;
-}
-.content {
-  padding: 16px;
-  box-sizing: border-box;
-  width: 100%;
-  flex: 1 0 auto;
-  border: #ccc 1px solid;
 }
 .home-content {
   display: flex;
@@ -144,7 +151,9 @@
   cursor: pointer;
 }
 
-/* Persona Creator Styles */
+/* ==================================================
+   Persona Creator Styles
+   ================================================== */
 .persona-creator {
   display: flex;
   flex-direction: column;
@@ -157,21 +166,22 @@
   padding: 32px;
   border: 1px solid var(--border);
   border-radius: 16px;
-  background-color: var(--bg);
+  background-color: var(--card-bg, #ffffff);
   box-shadow: var(--shadow);
+  color: var(--text-h);
 }
 
 .persona-creator h1 {
   align-self: center;
   margin: 0 0 8px;
   text-align: center;
-  color: white;
+  color: var(--text-h);
 }
 
 .persona-creator form > h2,
 .saved-personas > h2 {
   margin: 0 0 12px;
-  color: white;
+  color: var(--text-h);
 }
 
 .saved-personas {
@@ -195,13 +205,13 @@
   padding: 16px;
   border: 1px solid var(--border);
   border-radius: 8px;
-  background: var(--bg);
+  background: var(--card-bg, #ffffff);
 }
 
 .saved-persona h3,
 .saved-persona p {
   margin: 0 0 6px;
-  color: white;
+  color: var(--text-h);
 }
 
 .saved-persona small {
@@ -236,7 +246,7 @@
 
 .persona-form-section h2 {
   margin: 0 0 6px;
-  color: white;
+  color: var(--text-h);
 }
 
 .persona-form-section p,
@@ -255,7 +265,7 @@
 }
 
 .form-group label {
-  color: white;
+  color: var(--text-h);
   font-size: 15px;
   font-weight: 600;
 }
@@ -265,9 +275,9 @@
   box-sizing: border-box;
   width: 100%;
   padding: 12px 14px;
-  border: 1px solid var(--accent);
+  border: 1px solid var(--border);
   border-radius: 8px;
-  background-color: white;
+  background-color: #ffffff;
   color: var(--text-h);
   font: inherit;
   transition: border-color 150ms ease, box-shadow 150ms ease;
@@ -276,7 +286,6 @@
 .form-group textarea {
   min-height: 110px;
   resize: vertical;
-  border-color: var(--accent);
 }
 
 .form-group input:focus,
@@ -285,9 +294,11 @@
   outline: none;
   box-shadow: 0 0 0 3px var(--accent-bg);
 }
+
 .persona-creator-h1 {
-  color: white;
+  color: var(--text-h);
 }
+
 .persona-creator button {
   align-self: flex-start;
   padding: 12px 20px;
@@ -335,49 +346,115 @@
   }
 }
 
-.content {
-  padding: 16px;
-  box-sizing: border-box;
-  width: fit-content;
-  flex: 1 0 auto;
-  flex-direction: column;
-  align-items: center;
-  background-color: #f0f0f0;
-  border-radius: 8px;
-  margin: 10px;
-}
-.content h1 {
-  font-size: 40px;
-  font-weight: bold;
-  color: var(--text-h);
-  flex: 1 0 auto;
-  text-align: center;
-}
-.content form{
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  padding: 16px;
-}
+/* ==================================================
+   Login & Registration Pages (Scoped to .login-container)
+   ================================================== */
 .login-container {
   display: flex;
   flex-direction: column;
   align-items: center;
   justify-content: center;
-  height: 100vh;
-  background-color: #f0f0f0;
+  min-height: calc(100vh - 160px);
+  padding: 40px 16px;
+  box-sizing: border-box;
+  background-color: #f7f7f8;
+  width: 100%;
 }
-.content button {
+
+.login-container .content {
+  box-sizing: border-box;
+  width: 100%;
+  max-width: 420px;
+  flex: 0 0 auto;
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  background-color: #ffffff;
+  border: 1px solid #e2e8f0;
+  border-radius: 12px;
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.08);
+  padding: 36px 32px;
+  margin: auto;
+}
+
+.login-container .content h1 {
+  font-size: 32px;
+  font-weight: 700;
+  color: #111827 !important;
+  text-align: center;
+  margin: 0 0 24px 0;
+}
+
+.login-container .content form {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  width: 100%;
+  padding: 0;
+}
+
+.login-container .content form label {
+  font-size: 14px;
+  font-weight: 600;
+  color: #374151;
+  margin-bottom: -10px;
+}
+
+.login-container .content form input {
+  width: 100%;
+  box-sizing: border-box;
+  padding: 10px 14px;
+  border: 1px solid #d1d5db;
+  border-radius: 8px;
+  font-size: 15px;
+  outline: none;
+  background-color: #ffffff;
+  color: #111827;
+  transition: border-color 0.15s ease;
+}
+
+.login-container .content form input:focus {
+  border-color: var(--accent, #cfae70);
+  box-shadow: 0 0 0 3px rgba(207, 174, 112, 0.2);
+}
+
+.login-container .content form button {
+  width: 100%;
+  box-sizing: border-box;
+  margin-top: 8px;
   font-size: 16px;
-  color: white;
-  background-color: var(--accent);
+  font-weight: 600;
+  color: #ffffff;
+  background-color: var(--accent, #cfae70);
   border: none;
   border-radius: 8px;
-  padding: 8px 16px;
+  padding: 12px 16px;
   cursor: pointer;
-  flex: 1 0 auto;
+  transition: filter 0.15s ease;
 }
-.pcontent{
+
+.login-container .content form button:hover {
+  filter: brightness(0.92);
+}
+
+.login-container .content p {
+  text-align: center;
+  margin-top: 20px;
+  font-size: 14px;
+  color: #6b7280;
+}
+
+.login-container .content p a {
+  color: var(--accent, #cfae70);
+  font-weight: 600;
+  text-decoration: none;
+}
+
+.login-container .content p a:hover {
+  text-decoration: underline;
+}
+
+.pcontent {
   padding: 16px;
   box-sizing: border-box;
   width: 100%;
@@ -388,7 +465,7 @@
   border-radius: 8px;
   margin: 10px;
 }
-.persona-container{
+.persona-container {
   display: flex;
   flex-direction: column;
   align-items: center;
@@ -397,14 +474,9 @@
   min-height: 100vh;
 }
 
-
 /* ==================================================
    Educator Portal — unified page
-   Module & class management, accordion, modal, API
-   Kept in the shared App.css by team convention.
    ================================================== */
-
-/* Styles scoped to the combined educator page. Other VERA pages are unaffected. */
 .content:has(.educator-unified) { width: 100%; max-width: none; margin: 0; }
 .educator-unified { width: min(100%, 1200px); box-sizing: border-box; margin: 0 auto; padding: 24px; color: #1c1b1b; }
 .educator-unified h1 { text-align: center; color: #17151b; font-size: clamp(2rem,4vw,3rem); margin: 8px 0 12px; }
@@ -457,7 +529,6 @@
 .educator-student-grid label:has(input:checked) { border-color: #d1af72; background: #f5e4bb; }
 @media(max-width:600px){ .educator-unified { padding: 12px; } .educator-panel,.educator-modal { padding: 16px; } .educator-record-header { flex-wrap: wrap; } }
 
-
 /* Collapsible created-class and created-module sections */
 .educator-unified details.educator-section-fold {
   padding: 0;
@@ -496,4 +567,47 @@
 @media (max-width: 600px) {
   .educator-unified .educator-section-summary { padding: 16px; font-size: 1.3rem; }
   .educator-unified .educator-section-body { padding: 0 16px 16px; }
+}
+
+/* ==================================================
+   PageLayout Global Protection & Universal Safety Armor
+   Ensures containers stay unconstrained and text is always readable
+   ================================================== */
+main.content {
+  width: 100% !important;
+  max-width: none !important;
+  background: transparent !important;
+  border: none !important;
+  margin: 0 !important;
+  padding: 0 !important;
+  display: block !important;
+}
+
+main.content button {
+  flex: 0 0 auto !important;
+}
+
+/* Ensure headings and labels across all content cards remain high-contrast dark text */
+main.content h1,
+main.content h2,
+main.content h3,
+main.content label,
+.content h1,
+.content h2,
+.content h3,
+.content label {
+  color: var(--text-h, #111827);
+}
+
+/* Ensure inputs, selects, and textareas stay legible on white surfaces */
+input:not([type="checkbox"]):not([type="radio"]),
+textarea,
+select {
+  color: #111827 !important;
+  background-color: #ffffff !important;
+}
+
+/* Standardize colored submit/action buttons with crisp white text */
+button:not(.header-menu-toggle):not([style*="color"]) {
+  color: #ffffff;
 }
