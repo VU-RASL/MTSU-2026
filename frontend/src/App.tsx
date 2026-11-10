@@ -3,10 +3,13 @@ import Home from './pages/Home'
 import PersonaCreator from './pages/PersonaCreator'
 import StudentPortal from './pages/StudentPortal'
 import Learning from './pages/Learning'
-import EducatorReview from './pages/EducatorReview'
+import EducatorPortal from './pages/EducatorPortal'
 import './App.css'
 import RTC from './pages/RTC'
 import TreeDemo from './pages/TreeDemo'
+import Scenario from './pages/Scenario'
+import Login from './pages/Login'
+import Register from './pages/Register'
 
 function App() {
   //Using react router dom to manage routing between pages.
@@ -19,11 +22,14 @@ function App() {
     <>
       <Router>
         <Routes>
-          <Route path="/" element={<Home />} />
+          <Route path="/" element={<Login />} />
+          <Route path="/register" element={<Register />} />
+          <Route path="/home" element={<Home />} />
+          <Route path="/scenario-creator" element={<Scenario />} />
           <Route path="/persona-creator" element={<PersonaCreator />} />
           <Route path="/student-portal" element={<StudentPortal />} />
           <Route path="/learning" element={<Learning />} />
-          <Route path="/educator-review" element={<EducatorReview />} />
+          <Route path="/educator-portal" element={<EducatorPortal />} />
           <Route path="/rtc" element={<RTC />} />
           <Route path="/tree-demo" element={<TreeDemo />} />
         </Routes>

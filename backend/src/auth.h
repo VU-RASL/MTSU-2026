@@ -1,45 +1,37 @@
-// =============================================================================
-// auth.h — who is making this request?
-// =============================================================================
-//
-// Users live in Will's Supabase table:
-//   profiles (id bigint, name, email, role: student | educator | admin, created_at)
-//
-// Every route that cares about users calls currentUser(req) and checks the
-// role. The role always comes from the profiles table, never from the request.
-//
-// HOW THE CALLER IS IDENTIFIED (temporary, until real sign-in exists):
-//   X-User-Id: <profiles.id>     header sent by the frontend
-//   DEV_USER_ID=<profiles.id>    env var used when the header is missing,
-//                                so the current frontend keeps working
-// An id that isn't in profiles -> not logged in (401).
-//
-// This is NOT secure yet: anyone can send someone else's id. When sign-in
-// lands, only currentUser() in auth.cpp changes (verify a login token and
-// get the profile id from it). The routes stay exactly the same.
-// =============================================================================
+// wl 10/27/26
 
 #pragma once
 
+// includes
 #include <optional>
+#include <stdexcept>
 #include <string>
 
 #include "crow.h"
 
+// carryover of the enumerated class made in supabase
 enum class Role { Student, Educator, Admin };
 
+// every user gets an ID and a role. Other stuff too but for here, this is it
 struct CurrentUser {
-    std::string id;   // profiles.id as text, e.g. "3"
+    std::string id;
     Role role;
 };
 
-// The user making this request, or std::nullopt if not logged in
-// (routes answer 401 in that case).
+// if you can't auth, you can't get in
+class AuthUnavailable : public std::runtime_error {
+public:
+    using std::runtime_error::runtime_error;
+};
+
+// it's as it sounds
+void initializeAuth();
+
+// from the crow request, ID the current user
 std::optional<CurrentUser> currentUser(const crow::request& req);
 
-// The role of a profile, or std::nullopt if no profile has that id.
-// Used to check that a studentId really is a student.
+// as it sounds
 std::optional<Role> lookupRole(const std::string& profileId);
 
-// Educators and admins can use the educator side of the portal.
+// 
 inline bool isEducatorRole(Role role) { return role == Role::Educator || role == Role::Admin; }

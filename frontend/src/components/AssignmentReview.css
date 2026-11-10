@@ -1,0 +1,91 @@
+/* Educator Portal: review attempts + status badges */
+
+.assignment-review {
+  margin: 24px 0 40px;
+  padding: 24px;
+  border: 1px solid #ccc;
+  border-radius: 12px;
+  background-color: #fff;
+  color: #222;
+}
+
+.assignment-review h2 {
+  margin-top: 0;
+  margin-bottom: 20px;
+}
+
+.review-row {
+  padding: 16px 0;
+  border-top: 1px solid #e3e3e3;
+}
+
+.review-row:first-of-type {
+  border-top: 0;
+}
+
+.review-row-header {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: space-between;
+  align-items: center;
+  gap: 12px;
+}
+
+.review-row-header h3 {
+  margin: 0;
+}
+
+.review-meta {
+  margin: 4px 0 0;
+  font-size: 14px;
+  color: #555;
+}
+
+.review-row-actions {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.assignment-review button {
+  background-color: var(--accent);
+  color: white;
+  border: none;
+  padding: 10px 16px;
+  border-radius: 8px;
+  cursor: pointer;
+}
+
+.assignment-review button:hover {
+  filter: brightness(0.92);
+}
+
+.assignment-review .form-group {
+  margin-top: 12px;
+}
+
+.review-error {
+  color: crimson;
+}
+
+.status-badge {
+  display: inline-block;
+  padding: 4px 10px;
+  border-radius: 999px;
+  font-size: 13px;
+  font-weight: 600;
+  background-color: #e5e7eb;
+  color: #222;
+}
+
+.status-in_progress {
+  background-color: #fde68a;
+}
+
+.status-completed {
+  background-color: #bfdbfe;
+}
+
+.status-reviewed {
+  background-color: #bbf7d0;
+}

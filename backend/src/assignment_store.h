@@ -16,6 +16,7 @@ struct AssignmentFilter {
     std::string studentId;
     std::string status;
     int scenarioId = 0;
+    std::string assignedBy;
 };
 
 class AssignmentStore {
@@ -32,8 +33,8 @@ public:
     // Changes only the status. Returns false if the id doesn't exist.
     bool setStatus(int id, const std::string& status);
 
-    // Deletes the assignment (its session_results go with it).
-    // Returns false if the id doesn't exist.
+    // Deletes the assignment when db constraints permit
+    // Returns false if the assignment doesn't exist
     bool remove(int id);
 
 private:

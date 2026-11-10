@@ -1,5 +1,7 @@
 # Start with a small Debian Linux image.
-FROM debian:bookworm-slim
+# trixie (Debian 13), not bookworm: voice sessions use libcurl's WebSocket
+# support, which Debian only builds into curl 8.8 and later (bookworm has 7.88).
+FROM debian:trixie-slim
 
 # Refresh package lists, install compiler/build tools, Asio, and curl for health checks,
 # then remove package lists to keep the image smaller. Backslashes continue one command.

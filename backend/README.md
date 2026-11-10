@@ -1,10 +1,10 @@
-# Personas API (C++ / Crow)
+# Personas and Scenarios API (C++ / Crow)
 
-The backend for the Personas page. A small C++ server that the React frontend calls to list, create, edit, and delete personas.
+The backend API for creating, listing, editing, and deleting personas and scenarios.
 
 - **Framework:** [Crow](https://crowcpp.org) 1.3.5 (included in `crow/`)
 - **Port:** 18080 by default
-- **Storage:** in memory for now, so data resets every time the server restarts
+- **Storage:** Supabase for personas; scenarios are held in memory for now
 
 ---
 
@@ -80,10 +80,25 @@ All routes send and receive JSON.
 |---|---|---|
 | GET | `/api/health` | Checks that the server is up |
 | GET | `/api/personas` | Lists all personas. Add `?search=text` to filter. |
+| GET | `/api/personas/schema` | Returns persona form fields with descriptions and JSON paths. |
 | GET | `/api/personas/:id` | Gets one persona |
 | POST | `/api/personas` | Creates a persona (`title` is required) |
 | PUT | `/api/personas/:id` | Updates a persona. Only the fields you send change. |
 | DELETE | `/api/personas/:id` | Deletes a persona |
+| GET | `/api/scenarios` | Lists scenarios. Add `?search=text` to filter by title. |
+| GET | `/api/scenarios/schema` | Returns scenario form field definitions. |
+| GET | `/api/scenarios/:id` | Gets one scenario. |
+| POST | `/api/scenarios` | Creates a scenario (`title` is required). |
+| PUT | `/api/scenarios/:id` | Updates a scenario. Only the fields you send change. |
+| DELETE | `/api/scenarios/:id` | Deletes a scenario. |
+
+Scenarios are stored in the backend process and reset when the server restarts.
+They do not require a Supabase table. The personas API continues to use the
+existing Supabase `personas` table.
+
+The persona schema includes the full set of persona details and returns each
+field's description, section, input type, and nested JSON path. The create form
+uses that schema to build a request compatible with the persona API.
 
 Example create:
 
@@ -120,7 +135,7 @@ The JSON is nested to match the sections on the persona page:
 ```
 ## AGE = -1 MEANS AGE HAS NOT BEEN SET YET 
 
-Errors come back as `{"error": "message"}` with a 400 (bad input) or 404 (persona not found).
+Errors come back as `{"error": "message"}` with a 400 (bad input), 404 (record not found), or 500 (storage/request failure).
 
 ---
 

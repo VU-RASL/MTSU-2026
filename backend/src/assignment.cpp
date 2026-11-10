@@ -16,6 +16,9 @@ crow::json::wvalue toJson(const Assignment& a) {
     out["id"] = a.id;
     out["createdAt"] = a.createdAt;
     out["scenarioId"] = a.scenarioId;
+    if (a.personaId > 0) out["personaId"] = a.personaId;
+    else out["personaId"] = nullptr;
+    out["archived"] = a.archived;
     out["studentId"] = a.studentId;
     if (a.assignedBy.empty()) {
         out["assignedBy"] = nullptr;
@@ -49,6 +52,15 @@ bool applyCreateJson(const crow::json::rvalue& body, Assignment& a, std::string&
         return false;
     }
     a.scenarioId = static_cast<int>(body["scenarioId"].i());
+    
+    if (!body.has("personaId") ||
+    !isWholeNumber(body["personaId"]) ||
+    body["personaId"].d() < 1 ||
+    body["personaId"].d() > std::numeric_limits<int>::max()) {
+    	error = "'personaId' must be a positive whole number";
+    	return false;
+    }
+    a.personaId = static_cast<int>(body["personaId"].i());
 
     // studentId: required; text, or a whole number (the frontend's sample students use 1, 2, 3)
     if (!body.has("studentId")) {
