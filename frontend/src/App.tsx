@@ -6,6 +6,7 @@ import Learning from './pages/Learning'
 import EducatorPortal from './pages/EducatorPortal'
 import './App.css'
 import RTC from './pages/RTC'
+import TreeDemo from './pages/TreeDemo'
 import Scenario from './pages/Scenario'
 import Login from './pages/Login'
 import Register from './pages/Register'
@@ -30,6 +31,7 @@ function App() {
           <Route path="/learning" element={<Learning />} />
           <Route path="/educator-portal" element={<EducatorPortal />} />
           <Route path="/rtc" element={<RTC />} />
+          <Route path="/tree-demo" element={<TreeDemo />} />
         </Routes>
       </Router>
     </>
