@@ -1,8 +1,7 @@
 begin;
 
 -- auth.cpp queries profiles.id and role.
--- The backend provisions profiles and allows only student/educator roles from
--- verified Supabase signup metadata; never accept an admin role from signup.
+-- The backend provisions profiles and assigns roles; never trust a requested client role.
 -- Map a verified auth.users UUID to auth_user_id instead of treating UUIDs as numeric IDs.
 create table public.profiles (
     id bigint generated always as identity primary key
@@ -23,3 +22,4 @@ revoke all on sequence public.profiles_id_seq from public, anon, authenticated, 
 grant usage, select on sequence public.profiles_id_seq to service_role;
 
 commit;
+
