@@ -302,11 +302,16 @@ export default function EducatorPortal() {
           <p className="educator-help">Statuses here are simulated for UI review, not reported by the backend.</p>
         </section>
 
-        <section className="educator-panel">
-          <h2>Preview Scenarios</h2>
-          <p>Starting a scenario goes to the existing RTC page; this page does not change Unity integration.</p>
-          {scenarios.length === 0 ? <p>Scenario previews require API access.</p> : <div className="educator-card-grid">{scenarios.map(s => <article className="educator-record-body" key={s.id}><h3>{s.title}</h3><p>{s.summary}</p><p>Difficulty: {s.difficulty}</p><Link to="/rtc" className="educator-link-button">Start</Link></article>)}</div>}
-        </section>
+        <details className="educator-panel educator-section-fold">
+          <summary className="educator-section-summary">
+            <span>Preview Scenarios</span>
+            <span className="educator-section-meta">{scenarios.length} scenarios</span>
+          </summary>
+          <div className="educator-section-body">
+            <p>Starting a scenario goes to the existing RTC page; this page does not change Unity integration.</p>
+            {scenarios.length === 0 ? <p>Scenario previews require API access.</p> : <div className="educator-card-grid">{scenarios.map(s => <article className="educator-record-body" key={s.id}><h3>{s.title}</h3><p>{s.summary}</p><p>Difficulty: {s.difficulty}</p><Link to="/rtc" className="educator-link-button">Start</Link></article>)}</div>}
+          </div>
+        </details>
           
         <section className="educator-panel" aria-labelledby="live-assignment-title">
           <h2 id="live-assignment-title">Live Assignment API</h2>
