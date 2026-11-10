@@ -5,14 +5,14 @@ import Footer from '../components/Footer'
 import Header from '../components/Header'
 import { supabase } from '../supabase'
 
-type RegistrationRole = 'student' | 'educator'
-
+// New accounts always start as students. An authorized maintainer promotes
+// educators by changing public.profiles.role in Supabase; the backend
+// ignores any role a sign-up request asks for.
 const Register: React.FC = () => {
     const navigate = useNavigate()
     const [email, setEmail] = useState('')
     const [password, setPassword] = useState('')
     const [confirmPassword, setConfirmPassword] = useState('')
-    const [role, setRole] = useState<RegistrationRole>('student')
     const [error, setError] = useState('')
     const [message, setMessage] = useState('')
     const [submitting, setSubmitting] = useState(false)
@@ -29,13 +29,7 @@ const Register: React.FC = () => {
 
         setSubmitting(true)
         try {
-            const { data, error: signUpError } = await supabase.auth.signUp({
-                email,
-                password,
-                options: {
-                    data: { requested_role: role },
-                },
-            })
+            const { data, error: signUpError } = await supabase.auth.signUp({ email, password })
             if (signUpError) throw signUpError
 
             if (data.session) {
@@ -84,17 +78,7 @@ const Register: React.FC = () => {
                             value={confirmPassword}
                             onChange={(event) => setConfirmPassword(event.target.value)}
                         />
-                        <label htmlFor="register-role">I am registering as</label>
-                        <select
-                            id="register-role"
-                            value={role}
-                            onChange={(event) => setRole(
-                                event.target.value === 'educator' ? 'educator' : 'student',
-                            )}
-                        >
-                            <option value="student">Student</option>
-                            <option value="educator">Educator</option>
-                        </select>
+                        <p>New accounts start as students. Educators: ask your program administrator to upgrade your account.</p>
                         {error && <p role="alert">{error}</p>}
                         {message && <p role="status">{message}</p>}
                         <button type="submit" disabled={submitting}>

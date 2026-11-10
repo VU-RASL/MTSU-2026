@@ -41,25 +41,6 @@ bool isUuid(const std::string& id) {
     return true;
 }
 
-struct VerifiedUser {
-    std::string id;
-    Role requestedRole;
-};
-
-Role requestedRole(const crow::json::rvalue& user) {
-    if (!user.has("user_metadata") ||
-        user["user_metadata"].t() != crow::json::type::Object ||
-        !user["user_metadata"].has("requested_role") ||
-        user["user_metadata"]["requested_role"].t() != crow::json::type::String) {
-        return Role::Student;
-    }
-
-    // Public registration can choose educator, but never grant admin here.
-    return user["user_metadata"]["requested_role"].s() == "educator"
-               ? Role::Educator
-               : Role::Student;
-}
-
 // what role is a user? 
 std::optional<Role> parseRole(const std::string& role) {
     if (role == "student") return Role::Student;
@@ -184,7 +165,7 @@ public:
 
     // ask Supabase Auth whether this token belongs to a valid user
     // return that user's UUID if it does
-    std::optional<VerifiedUser> verify(const std::string& token) const {
+    std::optional<std::string> verify(const std::string& token) const {
         const auto response = request("/auth/v1/user", "GET", publishableKey_, token);
 
         // Supabase rejected the credentials
@@ -210,7 +191,7 @@ public:
         const std::string id = user["id"].s();
         if (!isUuid(id)) throw AuthUnavailable("Invalid authentication user ID");
 
-        return VerifiedUser{id, requestedRole(user)};
+        return id;
     }
 
     // read database rows using the backend's secret key
@@ -228,13 +209,13 @@ public:
     }
 
     // create a profile for a verified account that does not have one yet
-    void provision(const std::string& authId, Role role) const {
+    void provision(const std::string& authId) const {
         crow::json::wvalue body;
         body["auth_user_id"] = authId;
 
-        // The requested role comes from verified Supabase user metadata.
-        // Public registration may request educator, but not admin.
-        body["role"] = role == Role::Educator ? "educator" : "student";
+        // new profiles always start as students
+        // the request cannot choose educator or admin
+        body["role"] = "student";
 
         // auth_user_id is unique
         // request() adds a header that ignores a duplicate instead of overwriting it
@@ -409,18 +390,18 @@ std::optional<CurrentUser> currentUser(const crow::request& req) {
     if (!token) return std::nullopt;
 
     // have Supabase verify it and return the account's UUID
-    const auto verifiedUser = auth().verify(*token);
-    if (!verifiedUser) return std::nullopt;
+    const auto authId = auth().verify(*token);
+    if (!authId) return std::nullopt;
 
     // find the profile connected to that account
-    auto profile = profileFor(verifiedUser->id);
+    auto profile = profileFor(*authId);
 
-    // On the first verified login, create the role selected during signup.
+    // on the first verified login, create a student profile
     if (!profile) {
-        auth().provision(verifiedUser->id, verifiedUser->requestedRole);
+        auth().provision(*authId);
 
         // read it again so we get the database-assigned ID and stored role
-        profile = profileFor(verifiedUser->id);
+        profile = profileFor(*authId);
         if (!profile) throw AuthUnavailable("Profile provisioning incomplete");
     }
 
