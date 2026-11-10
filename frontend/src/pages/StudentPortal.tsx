@@ -1,8 +1,8 @@
 import React, { useEffect, useState } from 'react'
+import { useNavigate } from 'react-router-dom'
 import Header from '../components/Header'
 import Footer from '../components/Footer'
 import { listAssignments, startAssignment, type Assignment } from '../api/assignments'
-import { saveAttempt } from '../api/results'
 
 const STATUS_LABELS: Record<Assignment['status'], string> = {
   assigned: 'Assigned',
@@ -21,8 +21,7 @@ const StudentPortal: React.FC = () => {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
   const [searchTerm, setSearchTerm] = useState('')
-  const [notes, setNotes] = useState<Record<number, string>>({})
-  const [message, setMessage] = useState('')
+  const navigate = useNavigate()
 
   useEffect(() => {
     listAssignments()
@@ -35,33 +34,12 @@ const StudentPortal: React.FC = () => {
     `scenario ${a.scenarioId} ${a.status}`.toLowerCase().includes(searchTerm.toLowerCase())
   )
 
-  // Data going TO the backend: PUT the status.
+  // Start: mark the assignment in progress, then open the voice conversation.
   async function handleStart(id: number) {
     setError('')
-    setMessage('')
     try {
-      const updated = await startAssignment(id)
-      setAssignments((prev) => prev.map((a) => (a.id === id ? updated : a)))
-    } catch (e) {
-      setError((e as Error).message)
-    }
-  }
-
-  // Data going TO the backend: POST a practice attempt (transcript).
-  // Placeholder input until the real practice conversation page exists.
-  async function handleSave(id: number) {
-    const text = (notes[id] ?? '').trim()
-    if (!text) {
-      setError('Type something before saving an attempt.')
-      return
-    }
-    setError('')
-    setMessage('')
-    try {
-      await saveAttempt(id, [{ role: 'student', text }])
-      setAssignments((prev) => prev.map((a) => (a.id === id ? { ...a, status: 'completed' } : a)))
-      setNotes({ ...notes, [id]: '' })
-      setMessage('Attempt saved.')
+      await startAssignment(id)
+      navigate(`/rtc?assignmentId=${id}`)
     } catch (e) {
       setError((e as Error).message)
     }
@@ -90,7 +68,6 @@ const StudentPortal: React.FC = () => {
 
           {loading && <p>Loading assignments...</p>}
           {error && <p style={{ color: 'crimson' }}>Error: {error}</p>}
-          {message && <p>{message}</p>}
           {!loading && !error && filtered.length === 0 && <p>No assignments yet.</p>}
 
           <div style={{ display: 'flex', flexDirection: 'column', gap: '16px', marginTop: '12px' }}>
@@ -120,16 +97,9 @@ const StudentPortal: React.FC = () => {
                 )}
 
                 {a.status === 'in_progress' && (
-                  <div className="form-group">
-                    <textarea
-                      placeholder="Practice response (temporary until the chat page exists)"
-                      value={notes[a.id] ?? ''}
-                      onChange={(e) => setNotes({ ...notes, [a.id]: e.target.value })}
-                    />
-                    <button type="button" onClick={() => handleSave(a.id)}>
-                      Save Attempt
-                    </button>
-                  </div>
+                  <button type="button" style={{ marginTop: '12px' }} onClick={() => navigate(`/rtc?assignmentId=${a.id}`)}>
+                    Continue Conversation
+                  </button>
                 )}
               </div>
             ))}
