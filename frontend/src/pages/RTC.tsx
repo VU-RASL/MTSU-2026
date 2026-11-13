@@ -367,7 +367,7 @@ const RTC: React.FC = () => {
               {error && <p role="alert" style={{ color: '#b42318' }}>{error}</p>}
               {phase === 'ended' && (
                 <p role="status">
-                  Conversation ended and saved. <Link to="/student-portal">Back to your assignments</Link>
+                  Conversation ended and saved. <Link to={`/conversations?assignmentId=${assignmentId}`}>View saved conversation</Link> · <Link to="/student-portal">Back to your assignments</Link>
                 </p>
               )}
 

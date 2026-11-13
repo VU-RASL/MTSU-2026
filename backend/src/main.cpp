@@ -76,6 +76,7 @@
 #include "assignment_store.h"         // AssignmentStore (Educator Portal)
 #include "session_result_store.h"     // SessionResultStore (Educator Portal)
 #include "educator_routes.h"          // registerEducatorRoutes()
+#include "conversation_routes.h"      // registerConversationRoutes()
 #include "realtime_setup.h"
 
 // Helpers private to this file.
@@ -590,6 +591,9 @@ int main() {
 
     // Educator Portal: assignments and session results (see educator_routes.cpp)
     registerEducatorRoutes(app, assignments, results, store, scenarios);
+
+    // Saved conversation trees (practice attempts); see conversation_routes.cpp
+    registerConversationRoutes(app, assignments);
 
     // -------------------------------------------------------------------------
     // 3. Start the server
