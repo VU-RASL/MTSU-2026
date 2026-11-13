@@ -6,45 +6,31 @@ import { StatusBadge } from '../components/AttemptsPanel'
 import { createAssignment, deleteAssignment, listAssignments, type Assignment } from '../api/assignments'
 import { listScenarios, type Scenario } from '../api/scenarios'
 import { listPersonas, type Persona } from '../api/personas'
+import {
+  listStudents, listModules, listClasses, createModule as createModuleApi,
+  createClass as createClassApi, deleteModule as deleteModuleApi,
+  deleteClass as deleteClassApi, addStudentToClass, removeStudentFromClass,
+  assignModuleToClass, unassignModuleFromClass,
+  type Student, type Module, type ClassGroup,
+} from '../api/classes'
 import type { Status } from '../api/results'
 
-type PracticeModule = { id: number; name: string; scenarioId: number; personaId: number }
-type ClassGroup = { id: string; courseCode: string; section: string; studentIds: string[] }
-type LocalAssignment = { id: string; moduleId: number; classId: string; studentId: string; status: Status }
 type Modal = 'class' | 'module' | null
-
-const sampleStudents = Array.from({ length: 9 }, (_, i) => ({ id: String(i + 1), name: `Student ${i + 1}` }))
-const sampleScenarios = [
-  { id: 1, title: 'Initial Patient Assessment' },
-  { id: 2, title: 'Patient Communication' },
-  { id: 3, title: 'Clinical Interview' },
-]
-const samplePersonas = [
-  { id: 1, title: 'Patient A' },
-  { id: 2, title: 'Patient B' },
-  { id: 3, title: 'Patient C' },
-]
 const statuses: Status[] = ['assigned', 'in_progress', 'completed', 'reviewed']
-
-function readStored<T>(key: string): T[] {
-  try {
-    const raw = localStorage.getItem(key)
-    const value: unknown = raw ? JSON.parse(raw) : []
-    return Array.isArray(value) ? value as T[] : []
-  } catch {
-    return []
-  }
-}
-
-// Both older prototype keys are retained to avoid losing locally created records.
-const MODULE_KEY = 'vera-prototype-modules'
-const CLASS_KEY = 'vera-prototype-classes-v2'
-const LOCAL_ASSIGNMENT_KEY = 'vera-educator-local-assignments-v1'
+const errorText = (e: unknown) => e instanceof Error ? e.message : 'Request failed. Please try again.'
 
 export default function EducatorPortal() {
-  const [modules, setModules] = useState<PracticeModule[]>(() => readStored<PracticeModule>(MODULE_KEY))
-  const [classes, setClasses] = useState<ClassGroup[]>(() => readStored<ClassGroup>(CLASS_KEY))
-  const [localAssignments, setLocalAssignments] = useState<LocalAssignment[]>(() => readStored<LocalAssignment>(LOCAL_ASSIGNMENT_KEY))
+  const [modules, setModules] = useState<Module[]>([])
+  const [classes, setClasses] = useState<ClassGroup[]>([])
+  const [students, setStudents] = useState<Student[]>([])
+  const [scenarios, setScenarios] = useState<Scenario[]>([])
+  const [personas, setPersonas] = useState<Persona[]>([])
+  const [assignments, setAssignments] = useState<Assignment[]>([])
+  const [loading, setLoading] = useState(true)
+  const [saving, setSaving] = useState(false)
+  const [apiError, setApiError] = useState('')
+  const [apiNotice, setApiNotice] = useState('')
+
   const [modal, setModal] = useState<Modal>(null)
   const [moduleName, setModuleName] = useState('')
   const [moduleScenarioId, setModuleScenarioId] = useState('')
@@ -55,51 +41,16 @@ export default function EducatorPortal() {
   const [formError, setFormError] = useState('')
   const [selectedModule, setSelectedModule] = useState('')
   const [selectedClass, setSelectedClass] = useState('')
-  const [localNotice, setLocalNotice] = useState('')
-  const [expandedClasses, setExpandedClasses] = useState<string[]>([])
+  const [expandedClasses, setExpandedClasses] = useState<number[]>([])
   const [expandedModules, setExpandedModules] = useState<number[]>([])
-
-  // Existing backend-connected educator features remain available below.
-  const [scenarios, setScenarios] = useState<Scenario[]>([])
-  const [personas, setPersonas] = useState<Persona[]>([])
-  const [assignments, setAssignments] = useState<Assignment[]>([])
+  const [addStudentSelections, setAddStudentSelections] = useState<Record<number,string>>({})
   const [studentId, setStudentId] = useState('')
   const [scenarioId, setScenarioId] = useState('')
   const [personaId, setPersonaId] = useState('')
   const [filterStudentId, setFilterStudentId] = useState('')
   const [filterStatus, setFilterStatus] = useState<Status | ''>('')
-  const [loading, setLoading] = useState(true)
-  const [saving, setSaving] = useState(false)
-  const [apiError, setApiError] = useState('')
-  const [apiNotice, setApiNotice] = useState('')
 
-  useEffect(() => { localStorage.setItem(MODULE_KEY, JSON.stringify(modules)) }, [modules])
-  useEffect(() => { localStorage.setItem(CLASS_KEY, JSON.stringify(classes)) }, [classes])
-  useEffect(() => { localStorage.setItem(LOCAL_ASSIGNMENT_KEY, JSON.stringify(localAssignments)) }, [localAssignments])
-
-  useEffect(() => {
-    if (!modal) return
-    const onKeyDown = (e: KeyboardEvent) => { if (e.key === 'Escape') setModal(null) }
-    document.addEventListener('keydown', onKeyDown)
-    return () => document.removeEventListener('keydown', onKeyDown)
-  }, [modal])
-
-  useEffect(() => {
-    let active = true
-    // Independent requests ensure a 401 for assignments doesn't hide public/local UI.
-    Promise.allSettled([listScenarios(), listPersonas(), listAssignments()]).then(results => {
-      if (!active) return
-      if (results[0].status === 'fulfilled') setScenarios(results[0].value)
-      if (results[1].status === 'fulfilled') setPersonas(results[1].value)
-      if (results[2].status === 'fulfilled') setAssignments(results[2].value)
-      const failed = results.some(result => result.status === 'rejected')
-      if (failed) setApiError('Some live API data is unavailable. Sign-in may be required; local class and module tools still work.')
-      setLoading(false)
-    })
-    return () => { active = false }
-  }, [])
-
-  const refresh = useCallback(async (student = '', status: Status | '' = '') => {
+  const refreshAssignments = useCallback(async (student = '', status: Status | '' = '') => {
     const rows = await listAssignments({
       ...(student.trim() ? { studentId: student.trim() } : {}),
       ...(status ? { status } : {}),
@@ -107,111 +58,204 @@ export default function EducatorPortal() {
     setAssignments(rows)
   }, [])
 
-  const scenarioOptions = scenarios.length ? scenarios.map(s => ({ id: s.id, title: s.title })) : sampleScenarios
-  const personaOptions = personas.length ? personas.map(p => ({ id: p.id, title: p.title || p.identity?.name || `Persona #${p.id}` })) : samplePersonas
-  const scenarioTitle = (id: number) => scenarioOptions.find(s => s.id === id)?.title || `Scenario #${id}`
-  const personaTitle = (id: number) => personaOptions.find(p => p.id === id)?.title || `Persona #${id}`
-  const moduleTitle = (id: number) => modules.find(m => m.id === id)?.name || `Module #${id}`
-  const classTitle = (id: string) => classes.find(c => c.id === id)?.id || id
+  const refreshManagement = useCallback(async () => {
+    const [newModules, newClasses] = await Promise.all([listModules(), listClasses()])
+    setModules(newModules)
+    setClasses(newClasses)
+  }, [])
 
-  function openModal(which: Exclude<Modal, null>) {
-    setFormError('')
-    setModal(which)
+  const reloadAll = useCallback(async () => {
+    setLoading(true)
+    setApiError('')
+    const results = await Promise.allSettled([
+      listModules(), listClasses(), listStudents(),
+      listScenarios(), listPersonas(), listAssignments(),
+    ])
+    results.forEach((result, index) => {
+      if (result.status === 'fulfilled') {
+        // Each response goes to its matching typed React state.
+        switch (index) {
+          case 0: setModules(result.value as Module[]); break
+          case 1: setClasses(result.value as ClassGroup[]); break
+          case 2: setStudents(result.value as Student[]); break
+          case 3: setScenarios(result.value as Scenario[]); break
+          case 4: setPersonas(result.value as Persona[]); break
+          case 5: setAssignments(result.value as Assignment[]); break
+        }
+      }
+    })
+    const failures = results.flatMap((r, i) => r.status === 'rejected'
+      ? [`${['Modules', 'Classes', 'Students', 'Scenarios', 'Personas', 'Assignments'][i]}: ${errorText(r.reason)}`]
+      : [])
+    if (failures.length) setApiError(`Some data could not be loaded. ${failures.join(' | ')}`)
+    setLoading(false)
+  }, [])
+
+  useEffect(() => { void reloadAll() }, [reloadAll])
+  useEffect(() => {
+    if (!modal) return
+    const onKey = (event: KeyboardEvent) => { if (event.key === 'Escape' && !saving) setModal(null) }
+    document.addEventListener('keydown', onKey)
+    return () => document.removeEventListener('keydown', onKey)
+  }, [modal, saving])
+
+  const scenarioTitle = (id: number) => scenarios.find(s => s.id === id)?.title ?? `Scenario #${id}`
+  const personaTitle = (id: number) => {
+    const p = personas.find(p => p.id === id)
+    return p?.title || p?.identity?.name || `Persona #${id}`
+  }
+  const moduleTitle = (id: number | null) => modules.find(m => m.id === id)?.name ?? (id ? `Module #${id}` : 'Individual assignment')
+  const classTitle = (id: number | null) => {
+    const group = classes.find(c => c.id === id)
+    return group ? `${group.courseCode} — ${group.section}` : (id ? `Class #${id}` : 'Individual')
+  }
+  const studentTitle = (id: string) => {
+    const student = students.find(s => s.id === id)
+    return student ? (student.name || student.email || `Student ${id}`) : `Student ${id}`
   }
 
-  function createModule(event: FormEvent<HTMLFormElement>) {
+  function openModal(which: Exclude<Modal, null>) { setFormError(''); setModal(which) }
+
+  async function handleCreateModule(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
-    const scenario = Number(moduleScenarioId)
-    const persona = Number(modulePersonaId)
-    if (!moduleName.trim() || !Number.isSafeInteger(scenario) || scenario <= 0 || !Number.isSafeInteger(persona) || persona <= 0) {
-      setFormError('Enter a module name and choose both a scenario and a persona.')
+    const scenario = Number(moduleScenarioId), persona = Number(modulePersonaId)
+    if (!moduleName.trim() || !Number.isSafeInteger(scenario) || scenario < 1 || !Number.isSafeInteger(persona) || persona < 1) {
+      setFormError('Enter a module name and select both a scenario and persona.')
       return
     }
-    const nextId = Math.max(0, ...modules.map(m => m.id)) + 1
-    setModules(old => [...old, { id: nextId, name: moduleName.trim(), scenarioId: scenario, personaId: persona }])
-    setModuleName(''); setModuleScenarioId(''); setModulePersonaId('')
-    setModal(null)
-    setLocalNotice('Module created in browser storage.')
-  }
-
-  function createClass(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault()
-    const course = courseCode.trim().toUpperCase()
-    const sec = section.trim().toUpperCase()
-    if (!course || !sec || !selectedStudents.length) {
-      setFormError('Enter a course and section, then select at least one student.')
-      return
-    }
-    const id = `${course}-${sec}`
-    if (classes.some(c => c.id === id)) {
-      setFormError('This course section already exists.')
-      return
-    }
-    setClasses(old => [...old, { id, courseCode: course, section: sec, studentIds: [...selectedStudents] }])
-    setCourseCode(''); setSection(''); setSelectedStudents([])
-    setModal(null)
-    setLocalNotice(`Class ${id} created in browser storage.`)
-  }
-
-  function deleteClass(id: string) {
-    if (!window.confirm(`Delete class ${id} and its local assignment records?`)) return
-    setClasses(old => old.filter(c => c.id !== id))
-    setLocalAssignments(old => old.filter(a => a.classId !== id))
-    if (selectedClass === id) setSelectedClass('')
-    setLocalNotice(`Class ${id} removed locally.`)
-  }
-
-  function deleteModule(id: number) {
-    if (!window.confirm(`Delete ${moduleTitle(id)} and its local assignment records?`)) return
-    setModules(old => old.filter(m => m.id !== id))
-    setLocalAssignments(old => old.filter(a => a.moduleId !== id))
-    if (selectedModule === String(id)) setSelectedModule('')
-    setLocalNotice('Module removed locally.')
-  }
-
-  function assignModule(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault()
-    const group = classes.find(c => c.id === selectedClass)
-    const module = modules.find(m => m.id === Number(selectedModule))
-    if (!group || !module) { setLocalNotice('Select an existing class and module.'); return }
-    const existing = new Set(localAssignments.map(a => `${a.classId}|${a.moduleId}|${a.studentId}`))
-    const newAssignments = group.studentIds.filter(id => !existing.has(`${group.id}|${module.id}|${id}`)).map(id => ({
-      id: `${group.id}|${module.id}|${id}`, classId: group.id, moduleId: module.id, studentId: id, status: 'assigned' as Status,
-    }))
-    setLocalAssignments(old => [...old, ...newAssignments])
-    setLocalNotice(`${newAssignments.length} local assignment(s) added. No backend requests were made.`)
-  }
-
-  async function handleAssign(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault(); setApiError(''); setApiNotice('')
-    const scenario = Number(scenarioId), persona = Number(personaId)
-    if (!Number.isSafeInteger(scenario) || scenario <= 0 || !Number.isSafeInteger(persona) || persona <= 0 || !/^[1-9]\d*$/.test(studentId.trim())) {
-      setApiError('Choose a valid scenario, persona, and student profile ID.'); return
-    }
-    setSaving(true)
+    setSaving(true); setFormError(''); setApiError('')
     try {
-      await createAssignment(scenario, persona, studentId.trim())
-      setStudentId(''); setScenarioId(''); setPersonaId('')
-      setApiNotice('Live assignment created successfully.')
-      await refresh(filterStudentId, filterStatus)
-    } catch (e) { setApiError(e instanceof Error ? e.message : 'Unable to create assignment') }
+      await createModuleApi(moduleName.trim(), scenario, persona)
+      await refreshManagement()
+      setModuleName(''); setModuleScenarioId(''); setModulePersonaId('')
+      setModal(null); setApiNotice('Module saved to Supabase successfully.')
+    } catch (e) { setFormError(errorText(e)) }
     finally { setSaving(false) }
   }
 
-  async function handleUnassign(row: Assignment) {
-    if (!window.confirm(`Unassign ${scenarioTitle(row.scenarioId)} from student ${row.studentId}? Attempt data may also be affected.`)) return
+  async function handleCreateClass(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault()
+    const course = courseCode.trim().toUpperCase(), sec = section.trim().toUpperCase()
+    if (!course || !sec) { setFormError('Enter a course code and section.'); return }
+    setSaving(true); setFormError(''); setApiError('')
+    try {
+      await createClassApi(course, sec, selectedStudents)
+      await refreshManagement()
+      setCourseCode(''); setSection(''); setSelectedStudents([])
+      setModal(null); setApiNotice(`Class ${course} — ${sec} saved to Supabase.`)
+    } catch (e) { setFormError(errorText(e)) }
+    finally { setSaving(false) }
+  }
+
+  async function handleDeleteModule(module: Module) {
+    if (!window.confirm(`Delete module "${module.name}"? Unstarted assignments will be removed, but started assignments and their histories will be kept.`)) return
     setSaving(true); setApiError(''); setApiNotice('')
-    try { await deleteAssignment(row.id); setApiNotice(`Assignment #${row.id} removed.`); await refresh(filterStudentId, filterStatus) }
-    catch (e) { setApiError(e instanceof Error ? e.message : 'Unable to unassign') }
+    try {
+      const result = await deleteModuleApi(module.id)
+      await Promise.all([refreshManagement(), refreshAssignments(filterStudentId, filterStatus)])
+      if (selectedModule === String(module.id)) setSelectedModule('')
+      setApiNotice(`Module removed. ${result.removed} unstarted assignment(s) removed; ${result.kept} started assignment(s) retained.`)
+    } catch (e) { setApiError(errorText(e)) }
     finally { setSaving(false) }
   }
 
-  async function applyFilters() {
+  async function handleDeleteClass(group: ClassGroup) {
+    if (!window.confirm(`Delete ${group.courseCode} — ${group.section}? Unstarted assignments will be removed; started assignments and conversation histories will be kept.`)) return
+    setSaving(true); setApiError(''); setApiNotice('')
+    try {
+      const result = await deleteClassApi(group.id)
+      await Promise.all([refreshManagement(), refreshAssignments(filterStudentId, filterStatus)])
+      if (selectedClass === String(group.id)) setSelectedClass('')
+      setApiNotice(`Class deleted. ${result.removed} unstarted assignment(s) removed; ${result.kept} started assignment(s) retained.`)
+    } catch (e) { setApiError(errorText(e)) }
+    finally { setSaving(false) }
+  }
+
+  async function handleAddStudent(group: ClassGroup) {
+    const id = addStudentSelections[group.id]
+    if (!id) return
+    setSaving(true); setApiError(''); setApiNotice('')
+    try {
+      const result = await addStudentToClass(group.id, id)
+      await Promise.all([refreshManagement(), refreshAssignments(filterStudentId, filterStatus)])
+      setAddStudentSelections(old => ({ ...old, [group.id]: '' }))
+      setApiNotice(`${studentTitle(id)} added. ${result.created} assignment(s) created from existing class modules.`)
+    } catch (e) { setApiError(errorText(e)) }
+    finally { setSaving(false) }
+  }
+
+  async function handleRemoveStudent(group: ClassGroup, id: string) {
+    if (!window.confirm(`Remove ${studentTitle(id)} from ${group.courseCode} — ${group.section}? Started assignments and conversation histories will be retained.`)) return
+    setSaving(true); setApiError(''); setApiNotice('')
+    try {
+      const result = await removeStudentFromClass(group.id, id)
+      await Promise.all([refreshManagement(), refreshAssignments(filterStudentId, filterStatus)])
+      setApiNotice(`Student removed. ${result.removed} unstarted assignment(s) removed; ${result.kept} started assignment(s) retained.`)
+    } catch (e) { setApiError(errorText(e)) }
+    finally { setSaving(false) }
+  }
+
+  async function handleAssignModule(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault()
+    const classId = Number(selectedClass), moduleId = Number(selectedModule)
+    if (!Number.isSafeInteger(classId) || classId < 1 || !Number.isSafeInteger(moduleId) || moduleId < 1) {
+      setApiError('Choose a valid class and module.'); return
+    }
+    setSaving(true); setApiError(''); setApiNotice('')
+    try {
+      const result = await assignModuleToClass(classId, moduleId)
+      await Promise.all([refreshManagement(), refreshAssignments(filterStudentId, filterStatus)])
+      setApiNotice(`${moduleTitle(moduleId)} assigned to ${classTitle(classId)}. ${result.created} new assignment(s) created.`)
+    } catch (e) { setApiError(errorText(e)) }
+    finally { setSaving(false) }
+  }
+
+  async function handleUnassignClassModule(group: ClassGroup, moduleId: number) {
+    if (!window.confirm(`Unassign "${moduleTitle(moduleId)}" from ${classTitle(group.id)}? Unstarted assignments will be removed; started work and history will remain.`)) return
+    setSaving(true); setApiError(''); setApiNotice('')
+    try {
+      const result = await unassignModuleFromClass(group.id, moduleId)
+      await Promise.all([refreshManagement(), refreshAssignments(filterStudentId, filterStatus)])
+      setApiNotice(`Module unassigned from class. ${result.removed} removed; ${result.kept} retained.`)
+    } catch (e) { setApiError(errorText(e)) }
+    finally { setSaving(false) }
+  }
+
+  async function handleAssignIndividual(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault()
+    const scenario = Number(scenarioId), persona = Number(personaId)
+    if (!Number.isSafeInteger(scenario) || scenario < 1 || !Number.isSafeInteger(persona) || persona < 1 || !students.some(s => s.id === studentId)) {
+      setApiError('Choose a scenario, persona, and a real student account.'); return
+    }
+    setSaving(true); setApiError(''); setApiNotice('')
+    try {
+      await createAssignment(scenario, persona, studentId)
+      await refreshAssignments(filterStudentId, filterStatus)
+      setStudentId(''); setScenarioId(''); setPersonaId('')
+      setApiNotice('Individual assignment created successfully.')
+    } catch (e) { setApiError(errorText(e)) }
+    finally { setSaving(false) }
+  }
+
+  async function handleUnassignIndividual(row: Assignment) {
+    if (!window.confirm(`Remove assignment #${row.id} for ${studentTitle(row.studentId)}? This can affect saved attempts. This action cannot be undone.`)) return
+    setSaving(true); setApiError(''); setApiNotice('')
+    try {
+      await deleteAssignment(row.id)
+      await refreshAssignments(filterStudentId, filterStatus)
+      setApiNotice(`Assignment #${row.id} removed.`)
+    } catch (e) { setApiError(errorText(e)) }
+    finally { setSaving(false) }
+  }
+
+  async function handleFilter() {
     setLoading(true); setApiError('')
-    try { await refresh(filterStudentId, filterStatus) }
-    catch (e) { setApiError(e instanceof Error ? e.message : 'Unable to load assignments') }
+    try { await refreshAssignments(filterStudentId, filterStatus) }
+    catch (e) { setApiError(errorText(e)) }
     finally { setLoading(false) }
   }
+
+  const moduleAssignments = assignments.filter(a => a.classId != null && a.moduleId != null)
 
   return (
     <PageLayout>
@@ -223,144 +267,153 @@ export default function EducatorPortal() {
           <h2>Class Management</h2>
           <p>Organize students into course sections before assigning modules.</p>
           <div className="educator-actions">
-            <button type="button" onClick={() => openModal('class')}>+ Create Class</button>
-            <button type="button" onClick={() => openModal('module')}>+ Create Module</button>
+            <button type="button" disabled={saving || loading} onClick={() => openModal('class')}>+ Create Class</button>
+            <button type="button" disabled={saving || loading} onClick={() => openModal('module')}>+ Create Module</button>
             <Link to="/scenario-creator" className="educator-link-button">Scenario Creator</Link>
             <Link to="/persona-creator" className="educator-link-button">Persona Creator</Link>
+            <button type="button" disabled={loading || saving} onClick={() => void reloadAll()}>Refresh Data</button>
           </div>
-          <p className="educator-help">Classes and modules are saved in this browser until backend storage is available.</p>
-          {localNotice && <p className="educator-message" role="status">{localNotice}</p>}
+          <p className="educator-help">Classes, modules, and enrollments are stored in Supabase through the authenticated backend.</p>
+          {apiError && <p className="educator-api-error" role="alert">{apiError}</p>}
+          {apiNotice && <p className="educator-message" role="status">{apiNotice}</p>}
         </section>
 
         <section className="educator-panel">
           <h2>Assign Module to Class</h2>
-          <form className="educator-form" onSubmit={assignModule}>
+          <form className="educator-form" onSubmit={handleAssignModule}>
             <div className="educator-form-grid">
               <label>Module<select value={selectedModule} onChange={e => setSelectedModule(e.target.value)} required><option value="">Choose module</option>{modules.map(m => <option key={m.id} value={m.id}>{m.name}</option>)}</select></label>
               <label>Class<select value={selectedClass} onChange={e => setSelectedClass(e.target.value)} required><option value="">Choose class</option>{classes.map(c => <option key={c.id} value={c.id}>{c.courseCode} — {c.section}</option>)}</select></label>
             </div>
-            <button type="submit" disabled={!modules.length || !classes.length}>Assign to Class (Local Preview)</button>
+            <button type="submit" disabled={saving || loading || !modules.length || !classes.length || !selectedClass || !selectedModule}>{saving ? 'Saving...' : 'Assign Module to Class'}</button>
           </form>
-          <p className="educator-help">Generates one local assignment per student. This does not write assignments to Supabase.</p>
+          <p className="educator-help">This creates real assignments for each enrolled student. Repeating an existing class/module pairing does not duplicate assignments.</p>
         </section>
 
         <details className="educator-panel educator-section-fold">
-          <summary className="educator-section-summary">
-            <span>Created Classes</span>
-            <span className="educator-section-meta">{classes.length} classes</span>
-          </summary>
+          <summary className="educator-section-summary"><span>Created Classes</span><span className="educator-section-meta">{classes.length} {classes.length === 1 ? 'class' : 'classes'}</span></summary>
           <div className="educator-section-body">
-          {classes.length === 0 ? <p>No classes yet. Select Create Class to get started.</p> : classes.map(group => (
-            <div className="educator-record" key={group.id}>
-              <div className="educator-record-header">
-                <button className="educator-accordion" type="button" aria-expanded={expandedClasses.includes(group.id)} onClick={() => setExpandedClasses(old => old.includes(group.id) ? old.filter(id => id !== group.id) : [...old, group.id])}>
-                  <span>{expandedClasses.includes(group.id) ? '▾' : '▸'} {group.courseCode} — Section {group.section}</span>
-                  <small>{group.studentIds.length} students</small>
-                </button>
-                <button type="button" className="educator-danger" onClick={() => deleteClass(group.id)}>Remove</button>
+            {classes.length === 0 ? <p>No classes found. Create one to get started.</p> : classes.map(group => (
+              <div className="educator-record" key={group.id}>
+                <div className="educator-record-header">
+                  <button className="educator-accordion" type="button" aria-expanded={expandedClasses.includes(group.id)} onClick={() => setExpandedClasses(old => old.includes(group.id) ? old.filter(id => id !== group.id) : [...old, group.id])}>
+                    <span>{expandedClasses.includes(group.id) ? '▾' : '▸'} {group.courseCode} — Section {group.section}</span>
+                    <small>{group.studentIds.length} students · {group.moduleIds.length} modules</small>
+                  </button>
+                  <button type="button" className="educator-danger" disabled={saving} onClick={() => void handleDeleteClass(group)}>Remove</button>
+                </div>
+                {expandedClasses.includes(group.id) && <div className="educator-record-body">
+                  <h3>Enrolled Students</h3>
+                  <div className="educator-chips">
+                    {group.studentIds.length === 0 && <p>No students enrolled.</p>}
+                    {group.studentIds.map(id => <span key={id}>{studentTitle(id)} <button className="educator-chip-remove" type="button" disabled={saving} onClick={() => void handleRemoveStudent(group, id)} aria-label={`Remove ${studentTitle(id)}`}>×</button></span>)}
+                  </div>
+                  <div className="educator-inline-controls">
+                    <select aria-label={`Add student to ${classTitle(group.id)}`} value={addStudentSelections[group.id] ?? ''} onChange={e => setAddStudentSelections(old => ({ ...old, [group.id]: e.target.value }))}>
+                      <option value="">Choose student to add</option>
+                      {students.filter(s => !group.studentIds.includes(s.id)).map(s => <option key={s.id} value={s.id}>{s.name || `Student ${s.id}`} {s.email ? `(${s.email})` : ''}</option>)}
+                    </select>
+                    <button type="button" disabled={saving || !addStudentSelections[group.id]} onClick={() => void handleAddStudent(group)}>Add Student</button>
+                  </div>
+                  <h3>Assigned Modules</h3>
+                  {group.moduleIds.length === 0 ? <p>No modules assigned yet.</p> : group.moduleIds.map(id => <div className="educator-inline-row" key={id}><span>{moduleTitle(id)}</span><button type="button" className="educator-danger" disabled={saving} onClick={() => void handleUnassignClassModule(group, id)}>Unassign from Class</button></div>)}
+                </div>}
               </div>
-              {expandedClasses.includes(group.id) && <div className="educator-record-body"><div className="educator-chips">{group.studentIds.map(id => <span key={id}>Student {id}</span>)}</div></div>}
-            </div>
-          ))}
+            ))}
           </div>
         </details>
 
         <details className="educator-panel educator-section-fold">
-          <summary className="educator-section-summary">
-            <span>Created Modules</span>
-            <span className="educator-section-meta">{modules.length} modules</span>
-          </summary>
+          <summary className="educator-section-summary"><span>Created Modules</span><span className="educator-section-meta">{modules.length} {modules.length === 1 ? 'module' : 'modules'}</span></summary>
           <div className="educator-section-body">
-          <p>Select a module to review its linked scenario and persona.</p>
-          {modules.length === 0 ? <p>No modules created yet.</p> : modules.map(module => (
-            <div className="educator-record" key={module.id}>
+            <p>Select a module to review its linked scenario and persona.</p>
+            {modules.length === 0 ? <p>No modules found.</p> : modules.map(module => <div className="educator-record" key={module.id}>
               <div className="educator-record-header">
                 <button type="button" className="educator-accordion" aria-expanded={expandedModules.includes(module.id)} onClick={() => setExpandedModules(old => old.includes(module.id) ? old.filter(id => id !== module.id) : [...old, module.id])}>
-                  <span>{expandedModules.includes(module.id) ? '▾' : '▸'} {module.name}</span>
-                  <small>Module #{module.id}</small>
+                  <span>{expandedModules.includes(module.id) ? '▾' : '▸'} {module.name}</span><small>Module #{module.id}</small>
                 </button>
-                <button type="button" className="educator-danger" onClick={() => deleteModule(module.id)}>Remove</button>
+                <button type="button" className="educator-danger" disabled={saving} onClick={() => void handleDeleteModule(module)}>Remove</button>
               </div>
-              {expandedModules.includes(module.id) && (
-                <div className="educator-record-body">
-                  <p>Scenario: {scenarioTitle(module.scenarioId)} (ID {module.scenarioId})</p>
-                  <p>Persona: {personaTitle(module.personaId)} (ID {module.personaId})</p>
-                  <p className="educator-help">Module details are saved locally.</p>
-                  <Link to="/rtc" className="educator-link-button">
-                    Start Scenario
-                  </Link>
-                </div>
-              )}
-            </div>
-          ))}
+              {expandedModules.includes(module.id) && <div className="educator-record-body">
+                <p>Scenario: {scenarioTitle(module.scenarioId)} (ID {module.scenarioId})</p>
+                <p>Persona: {personaTitle(module.personaId)} (ID {module.personaId})</p>
+                <p className="educator-help">Module data is saved in Supabase. An actual student assignment is required to start an RTC session.</p>
+              </div>}
+            </div>)}
           </div>
         </details>
 
         <section className="educator-panel">
-          <h2>Module Assignment Status (Local Preview)</h2>
-          {localAssignments.length === 0 ? <p>No local module assignments yet.</p> : <div className="educator-scroll"><table className="educator-table"><thead><tr><th>Class</th><th>Student</th><th>Module</th><th>Status</th><th>Action</th></tr></thead><tbody>{localAssignments.map(a => <tr key={a.id}><td>{classTitle(a.classId)}</td><td>Student {a.studentId}</td><td>{moduleTitle(a.moduleId)}</td><td><select aria-label={`Status for Student ${a.studentId}`} value={a.status} onChange={e => setLocalAssignments(old => old.map(row => row.id === a.id ? { ...row, status: e.target.value as Status } : row))}>{statuses.map(s => <option key={s} value={s}>{s.replace('_', ' ')}</option>)}</select></td><td><button type="button" className="educator-danger" onClick={() => setLocalAssignments(old => old.filter(row => row.id !== a.id))}>Remove</button></td></tr>)}</tbody></table></div>}
-          <p className="educator-help">Statuses here are simulated for UI review, not reported by the backend.</p>
+          <h2>Module Assignment Status</h2>
+          <p>Live status from Supabase. Audit opens the selected student's saved conversation history.</p>
+          <button type="button" disabled={saving || loading} onClick={() => void handleFilter()}>Refresh Assignment Status</button>
+          {loading ? <p>Loading assignments...</p> : moduleAssignments.length === 0 ? <p>No class module assignments found.</p> : <div className="educator-scroll"><table className="educator-table">
+            <thead><tr><th>Class</th><th>Student</th><th>Module</th><th>Status</th><th>Actions</th></tr></thead>
+            <tbody>{moduleAssignments.map(a => <tr key={a.id}>
+              <td>{classTitle(a.classId)}</td><td>{studentTitle(a.studentId)}</td><td>{moduleTitle(a.moduleId)}</td>
+              <td><StatusBadge status={a.status}/>{a.archived ? ' (Archived)' : ''}</td>
+              <td><div className="educator-row-actions"><Link to={`/conversations?assignmentId=${a.id}`} className="educator-link-button">Audit</Link><button type="button" className="educator-danger" disabled={saving} onClick={() => void handleUnassignIndividual(a)}>Remove</button></div></td>
+            </tr>)}</tbody>
+          </table></div>}
+          <p className="educator-help">Removing an individual assignment may affect its history. To remove an entire class/module relationship while retaining started work, use Unassign from Class above.</p>
         </section>
 
         <details className="educator-panel educator-section-fold">
-          <summary className="educator-section-summary">
-            <span>Preview Scenarios</span>
-            <span className="educator-section-meta">{scenarios.length} scenarios</span>
-          </summary>
+          <summary className="educator-section-summary"><span>Preview Scenarios</span><span className="educator-section-meta">{scenarios.length} scenarios</span></summary>
           <div className="educator-section-body">
-            <p>Starting a scenario goes to the existing RTC page; this page does not change Unity integration.</p>
-            {scenarios.length === 0 ? <p>Scenario previews require API access.</p> : <div className="educator-card-grid">{scenarios.map(s => <article className="educator-record-body" key={s.id}><h3>{s.title}</h3><p>{s.summary}</p><p>Difficulty: {s.difficulty}</p><Link to="/rtc" className="educator-link-button">Start</Link></article>)}</div>}
+            <p>Educators can review scenario details here. Voice sessions start from the Student Portal using a real assignment ID.</p>
+            {scenarios.length === 0 ? <p>Scenario previews require API access.</p> : <div className="educator-card-grid">{scenarios.map(s => <article className="educator-record-body" key={s.id}><h3>{s.title}</h3><p>{s.summary}</p><p>Difficulty: {s.difficulty}</p></article>)}</div>}
           </div>
         </details>
-          
+
         <section className="educator-panel" aria-labelledby="live-assignment-title">
-          <h2 id="live-assignment-title">Live Assignment API</h2>
-          <p>The original educator backend features remain below. A valid login is required for live operations.</p>
-          {apiError && <p className="educator-api-error" role="alert">{apiError}</p>}
-          {apiNotice && <p className="educator-message" role="status">{apiNotice}</p>}
+          <h2 id="live-assignment-title">Individual Assignments (API)</h2>
+          <p>Educators can still assign a scenario/persona to one student independently of a class.</p>
           <details>
             <summary>Assign an individual scenario and persona</summary>
-            <form className="educator-form" onSubmit={handleAssign}>
+            <form className="educator-form" onSubmit={handleAssignIndividual}>
               <div className="educator-form-grid">
-                <label>Student profile ID<input value={studentId} onChange={e => setStudentId(e.target.value)} placeholder="Real student profile ID" required /></label>
+                <label>Student<select value={studentId} onChange={e => setStudentId(e.target.value)} required><option value="">Choose student</option>{students.map(s => <option key={s.id} value={s.id}>{s.name || `Student ${s.id}`} {s.email ? `(${s.email})` : ''}</option>)}</select></label>
                 <label>Scenario<select value={scenarioId} onChange={e => setScenarioId(e.target.value)} required><option value="">Choose scenario</option>{scenarios.map(s => <option key={s.id} value={s.id}>{s.title}</option>)}</select></label>
                 <label>Persona<select value={personaId} onChange={e => setPersonaId(e.target.value)} required><option value="">Choose persona</option>{personas.map(p => <option key={p.id} value={p.id}>{p.title || p.identity?.name || `Persona #${p.id}`}</option>)}</select></label>
               </div>
-              <button type="submit" disabled={saving || loading || !studentId.trim() || !scenarioId || !personaId}>{saving ? 'Assigning...' : 'Assign Scenario (API)'}</button>
+              <button type="submit" disabled={saving || loading || !studentId || !scenarioId || !personaId}>{saving ? 'Assigning...' : 'Assign Scenario (API)'}</button>
             </form>
           </details>
           <details>
-            <summary>Current backend assignments</summary>
+            <summary>Current backend assignments ({assignments.length})</summary>
             <div className="educator-form-grid">
               <label>Student filter<input value={filterStudentId} onChange={e => setFilterStudentId(e.target.value)} placeholder="All students" /></label>
               <label>Status filter<select value={filterStatus} onChange={e => setFilterStatus(e.target.value as Status | '')}><option value="">All statuses</option>{statuses.map(s => <option key={s} value={s}>{s.replace('_', ' ')}</option>)}</select></label>
             </div>
-            <button type="button" disabled={loading || saving} onClick={applyFilters}>Refresh backend assignments</button>
-            {loading ? <p>Loading...</p> : assignments.length === 0 ? <p>No backend assignments loaded.</p> : <div className="educator-scroll"><table className="educator-table"><thead><tr><th>ID</th><th>Student</th><th>Scenario</th><th>Persona</th><th>Status</th><th>Action</th></tr></thead><tbody>{assignments.map(a => <tr key={a.id}><td>#{a.id}</td><td>{a.studentId}</td><td>{scenarioTitle(a.scenarioId)}</td><td>{a.personaId ? personaTitle(a.personaId) : 'Unspecified'}</td><td><StatusBadge status={a.status}/>{a.archived ? ' (Archived)' : ''}</td><td><button type="button" className="educator-danger" disabled={saving} onClick={() => handleUnassign(a)}>Unassign</button></td></tr>)}</tbody></table></div>}
+            <button type="button" disabled={loading || saving} onClick={() => void handleFilter()}>Apply Filters / Refresh</button>
+            {loading ? <p>Loading...</p> : assignments.length === 0 ? <p>No assignments loaded.</p> : <div className="educator-scroll"><table className="educator-table">
+              <thead><tr><th>ID</th><th>Student</th><th>Scenario</th><th>Persona</th><th>Status</th><th>Actions</th></tr></thead>
+              <tbody>{assignments.map(a => <tr key={a.id}><td>#{a.id}</td><td>{studentTitle(a.studentId)}</td><td>{scenarioTitle(a.scenarioId)}</td><td>{a.personaId ? personaTitle(a.personaId) : 'Unspecified'}</td><td><StatusBadge status={a.status}/>{a.archived ? ' (Archived)' : ''}</td><td><div className="educator-row-actions"><Link to={`/conversations?assignmentId=${a.id}`} className="educator-link-button">Audit</Link><button type="button" className="educator-danger" disabled={saving} onClick={() => void handleUnassignIndividual(a)}>Unassign</button></div></td></tr>)}</tbody>
+            </table></div>}
           </details>
         </section>
 
         <div className="educator-review"><AssignmentReview /></div>
-
-        
       </main>
 
-      {modal && <div className="educator-modal-backdrop" onMouseDown={e => { if (e.target === e.currentTarget) setModal(null) }}>
+      {modal && <div className="educator-modal-backdrop" onMouseDown={e => { if (e.target === e.currentTarget && !saving) setModal(null) }}>
         <section className="educator-modal" role="dialog" aria-modal="true" aria-labelledby="educator-modal-title">
-          <div className="educator-modal-heading"><h2 id="educator-modal-title">{modal === 'module' ? 'Create Module' : 'Create Class'}</h2><button type="button" aria-label="Close dialog" className="educator-close" onClick={() => setModal(null)}>×</button></div>
-          {modal === 'module' ? <form className="educator-form" onSubmit={createModule}>
-            <label>Module Name<input autoFocus value={moduleName} onChange={e => setModuleName(e.target.value)} required placeholder="Enter module name" /></label>
-            <label>Scenario<select value={moduleScenarioId} onChange={e => setModuleScenarioId(e.target.value)} required><option value="">Choose scenario</option>{scenarioOptions.map(s => <option key={s.id} value={s.id}>{s.title}</option>)}</select></label>
-            <label>Persona<select value={modulePersonaId} onChange={e => setModulePersonaId(e.target.value)} required><option value="">Choose persona</option>{personaOptions.map(p => <option key={p.id} value={p.id}>{p.title}</option>)}</select></label>
-            <p className="educator-help">If signed out, these are labeled demonstration choices. Modules are stored in your browser.</p>
+          <div className="educator-modal-heading"><h2 id="educator-modal-title">{modal === 'module' ? 'Create Module' : 'Create Class'}</h2><button type="button" aria-label="Close dialog" className="educator-close" disabled={saving} onClick={() => setModal(null)}>×</button></div>
+          {modal === 'module' ? <form className="educator-form" onSubmit={handleCreateModule}>
+            <label>Module Name<input autoFocus maxLength={200} value={moduleName} onChange={e => setModuleName(e.target.value)} required placeholder="Enter module name" /></label>
+            <label>Scenario<select value={moduleScenarioId} onChange={e => setModuleScenarioId(e.target.value)} required><option value="">Choose scenario</option>{scenarios.map(s => <option key={s.id} value={s.id}>{s.title}</option>)}</select></label>
+            <label>Persona<select value={modulePersonaId} onChange={e => setModulePersonaId(e.target.value)} required><option value="">Choose persona</option>{personas.map(p => <option key={p.id} value={p.id}>{p.title || p.identity?.name || `Persona #${p.id}`}</option>)}</select></label>
+            <p className="educator-help">Module will be saved to Supabase using your educator account.</p>
             {formError && <p role="alert" className="educator-api-error">{formError}</p>}
-            <div className="educator-actions"><button type="submit">Create Module</button><button type="button" className="educator-cancel" onClick={() => setModal(null)}>Cancel</button></div>
-          </form> : <form className="educator-form" onSubmit={createClass}>
-            <div className="educator-form-grid"><label>Course Code<input autoFocus value={courseCode} onChange={e => setCourseCode(e.target.value)} placeholder="HLTH-3210" required /></label><label>Section<input value={section} onChange={e => setSection(e.target.value)} placeholder="D01" required /></label></div>
-            <fieldset className="educator-students"><legend>Select Students</legend><div className="educator-student-grid">{sampleStudents.map(s => <label key={s.id}><input type="checkbox" checked={selectedStudents.includes(s.id)} onChange={() => setSelectedStudents(old => old.includes(s.id) ? old.filter(id => id !== s.id) : [...old, s.id])}/>{s.name}</label>)}</div></fieldset>
+            <div className="educator-actions"><button type="submit" disabled={saving || !scenarios.length || !personas.length}>{saving ? 'Saving...' : 'Create Module'}</button><button type="button" disabled={saving} className="educator-cancel" onClick={() => setModal(null)}>Cancel</button></div>
+          </form> : <form className="educator-form" onSubmit={handleCreateClass}>
+            <div className="educator-form-grid"><label>Course Code<input autoFocus maxLength={100} value={courseCode} onChange={e => setCourseCode(e.target.value)} placeholder="HLTH-3210" required /></label><label>Section<input maxLength={100} value={section} onChange={e => setSection(e.target.value)} placeholder="D01" required /></label></div>
+            <fieldset className="educator-students"><legend>Select Students</legend><div className="educator-student-grid">{students.map(s => <label key={s.id}><input type="checkbox" checked={selectedStudents.includes(s.id)} onChange={() => setSelectedStudents(old => old.includes(s.id) ? old.filter(id => id !== s.id) : [...old, s.id])}/><span>{s.name || `Student ${s.id}`}<small>{s.email ? ` · ${s.email}` : ''}</small></span></label>)}</div></fieldset>
+            {students.length === 0 && <p className="educator-help">No student profiles are available. You can create an empty class and enroll students later.</p>}
             <p>{selectedStudents.length} students selected</p>
             {formError && <p role="alert" className="educator-api-error">{formError}</p>}
-            <div className="educator-actions"><button type="submit">Create Class</button><button type="button" className="educator-cancel" onClick={() => setModal(null)}>Cancel</button></div>
+            <div className="educator-actions"><button type="submit" disabled={saving}>{saving ? 'Saving...' : 'Create Class'}</button><button type="button" disabled={saving} className="educator-cancel" onClick={() => setModal(null)}>Cancel</button></div>
           </form>}
         </section>
       </div>}
