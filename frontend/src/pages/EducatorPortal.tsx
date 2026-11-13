@@ -48,14 +48,13 @@ export default function EducatorPortal() {
   const [scenarioId, setScenarioId] = useState('')
   const [personaId, setPersonaId] = useState('')
   const [filterStudentId, setFilterStudentId] = useState('')
+  const [filterAssignmentId, setFilterAssignmentId] = useState('')
   const [filterStatus, setFilterStatus] = useState<Status | ''>('')
 
-  const refreshAssignments = useCallback(async (student = '', status: Status | '' = '') => {
-    const rows = await listAssignments({
-      ...(student.trim() ? { studentId: student.trim() } : {}),
-      ...(status ? { status } : {}),
-    })
-    setAssignments(rows)
+  // Keep the complete authorized assignment list in state. Filtering is only
+  // applied to the Individual Assignments table, not the module status panel.
+  const refreshAssignments = useCallback(async () => {
+    setAssignments(await listAssignments())
   }, [])
 
   const refreshManagement = useCallback(async () => {
@@ -114,6 +113,26 @@ export default function EducatorPortal() {
     return student ? (student.name || student.email || `Student ${id}`) : `Student ${id}`
   }
 
+  // Show the actual profile ID alongside the email for easy lookup.
+  const studentWithId = (id: string) => {
+    const student = students.find(s => s.id === id)
+    return student ? `${student.email || student.name || 'Student'} (ID: ${id})` : `Student ID: ${id}`
+  }
+
+  // Search matches IDs, emails and names (including partial, case-insensitive
+  // matches). This avoids sending an email as the backend's studentId filter.
+  const studentQuery = filterStudentId.trim().toLowerCase()
+  const filteredAssignments = assignments.filter(a => {
+    const assignmentQuery = filterAssignmentId.trim().replace(/^#/, '')
+    if (assignmentQuery && String(a.id) !== assignmentQuery) return false
+    if (filterStatus && a.status !== filterStatus) return false
+    if (!studentQuery) return true
+    const student = students.find(s => s.id === a.studentId)
+    return a.studentId.toLowerCase().includes(studentQuery) ||
+      (student?.email?.toLowerCase().includes(studentQuery) ?? false) ||
+      (student?.name?.toLowerCase().includes(studentQuery) ?? false)
+  })
+
   function openModal(which: Exclude<Modal, null>) { setFormError(''); setModal(which) }
 
   async function handleCreateModule(event: FormEvent<HTMLFormElement>) {
@@ -152,7 +171,7 @@ export default function EducatorPortal() {
     setSaving(true); setApiError(''); setApiNotice('')
     try {
       const result = await deleteModuleApi(module.id)
-      await Promise.all([refreshManagement(), refreshAssignments(filterStudentId, filterStatus)])
+      await Promise.all([refreshManagement(), refreshAssignments()])
       if (selectedModule === String(module.id)) setSelectedModule('')
       setApiNotice(`Module removed. ${result.removed} unstarted assignment(s) removed; ${result.kept} started assignment(s) retained.`)
     } catch (e) { setApiError(errorText(e)) }
@@ -164,7 +183,7 @@ export default function EducatorPortal() {
     setSaving(true); setApiError(''); setApiNotice('')
     try {
       const result = await deleteClassApi(group.id)
-      await Promise.all([refreshManagement(), refreshAssignments(filterStudentId, filterStatus)])
+      await Promise.all([refreshManagement(), refreshAssignments()])
       if (selectedClass === String(group.id)) setSelectedClass('')
       setApiNotice(`Class deleted. ${result.removed} unstarted assignment(s) removed; ${result.kept} started assignment(s) retained.`)
     } catch (e) { setApiError(errorText(e)) }
@@ -177,7 +196,7 @@ export default function EducatorPortal() {
     setSaving(true); setApiError(''); setApiNotice('')
     try {
       const result = await addStudentToClass(group.id, id)
-      await Promise.all([refreshManagement(), refreshAssignments(filterStudentId, filterStatus)])
+      await Promise.all([refreshManagement(), refreshAssignments()])
       setAddStudentSelections(old => ({ ...old, [group.id]: '' }))
       setApiNotice(`${studentTitle(id)} added. ${result.created} assignment(s) created from existing class modules.`)
     } catch (e) { setApiError(errorText(e)) }
@@ -189,7 +208,7 @@ export default function EducatorPortal() {
     setSaving(true); setApiError(''); setApiNotice('')
     try {
       const result = await removeStudentFromClass(group.id, id)
-      await Promise.all([refreshManagement(), refreshAssignments(filterStudentId, filterStatus)])
+      await Promise.all([refreshManagement(), refreshAssignments()])
       setApiNotice(`Student removed. ${result.removed} unstarted assignment(s) removed; ${result.kept} started assignment(s) retained.`)
     } catch (e) { setApiError(errorText(e)) }
     finally { setSaving(false) }
@@ -204,7 +223,7 @@ export default function EducatorPortal() {
     setSaving(true); setApiError(''); setApiNotice('')
     try {
       const result = await assignModuleToClass(classId, moduleId)
-      await Promise.all([refreshManagement(), refreshAssignments(filterStudentId, filterStatus)])
+      await Promise.all([refreshManagement(), refreshAssignments()])
       setApiNotice(`${moduleTitle(moduleId)} assigned to ${classTitle(classId)}. ${result.created} new assignment(s) created.`)
     } catch (e) { setApiError(errorText(e)) }
     finally { setSaving(false) }
@@ -215,7 +234,7 @@ export default function EducatorPortal() {
     setSaving(true); setApiError(''); setApiNotice('')
     try {
       const result = await unassignModuleFromClass(group.id, moduleId)
-      await Promise.all([refreshManagement(), refreshAssignments(filterStudentId, filterStatus)])
+      await Promise.all([refreshManagement(), refreshAssignments()])
       setApiNotice(`Module unassigned from class. ${result.removed} removed; ${result.kept} retained.`)
     } catch (e) { setApiError(errorText(e)) }
     finally { setSaving(false) }
@@ -230,7 +249,7 @@ export default function EducatorPortal() {
     setSaving(true); setApiError(''); setApiNotice('')
     try {
       await createAssignment(scenario, persona, studentId)
-      await refreshAssignments(filterStudentId, filterStatus)
+      await refreshAssignments()
       setStudentId(''); setScenarioId(''); setPersonaId('')
       setApiNotice('Individual assignment created successfully.')
     } catch (e) { setApiError(errorText(e)) }
@@ -242,7 +261,7 @@ export default function EducatorPortal() {
     setSaving(true); setApiError(''); setApiNotice('')
     try {
       await deleteAssignment(row.id)
-      await refreshAssignments(filterStudentId, filterStatus)
+      await refreshAssignments()
       setApiNotice(`Assignment #${row.id} removed.`)
     } catch (e) { setApiError(errorText(e)) }
     finally { setSaving(false) }
@@ -250,7 +269,7 @@ export default function EducatorPortal() {
 
   async function handleFilter() {
     setLoading(true); setApiError('')
-    try { await refreshAssignments(filterStudentId, filterStatus) }
+    try { await refreshAssignments() }
     catch (e) { setApiError(errorText(e)) }
     finally { setLoading(false) }
   }
@@ -291,7 +310,7 @@ export default function EducatorPortal() {
         </section>
 
         <details className="educator-panel educator-section-fold">
-          <summary className="educator-section-summary"><span>Created Classes</span><span className="educator-section-meta">{classes.length} {classes.length === 1 ? 'class' : 'classes'}</span></summary>
+          <summary className="educator-section-summary"><span>Created Classes</span><span className="educator-section-meta">{classes.length} classes</span></summary>
           <div className="educator-section-body">
             {classes.length === 0 ? <p>No classes found. Create one to get started.</p> : classes.map(group => (
               <div className="educator-record" key={group.id}>
@@ -324,7 +343,7 @@ export default function EducatorPortal() {
         </details>
 
         <details className="educator-panel educator-section-fold">
-          <summary className="educator-section-summary"><span>Created Modules</span><span className="educator-section-meta">{modules.length} {modules.length === 1 ? 'module' : 'modules'}</span></summary>
+          <summary className="educator-section-summary"><span>Created Modules</span><span className="educator-section-meta">{modules.length} modules</span></summary>
           <div className="educator-section-body">
             <p>Select a module to review its linked scenario and persona.</p>
             {modules.length === 0 ? <p>No modules found.</p> : modules.map(module => <div className="educator-record" key={module.id}>
@@ -350,7 +369,7 @@ export default function EducatorPortal() {
           {loading ? <p>Loading assignments...</p> : moduleAssignments.length === 0 ? <p>No class module assignments found.</p> : <div className="educator-scroll"><table className="educator-table">
             <thead><tr><th>Class</th><th>Student</th><th>Module</th><th>Status</th><th>Actions</th></tr></thead>
             <tbody>{moduleAssignments.map(a => <tr key={a.id}>
-              <td>{classTitle(a.classId)}</td><td>{studentTitle(a.studentId)}</td><td>{moduleTitle(a.moduleId)}</td>
+              <td>{classTitle(a.classId)}</td><td>{studentWithId(a.studentId)}</td><td>{moduleTitle(a.moduleId)}</td>
               <td><StatusBadge status={a.status}/>{a.archived ? ' (Archived)' : ''}</td>
               <td><div className="educator-row-actions"><Link to={`/conversations?assignmentId=${a.id}`} className="educator-link-button">Audit</Link><button type="button" className="educator-danger" disabled={saving} onClick={() => void handleUnassignIndividual(a)}>Remove</button></div></td>
             </tr>)}</tbody>
@@ -381,15 +400,16 @@ export default function EducatorPortal() {
             </form>
           </details>
           <details>
-            <summary>Current backend assignments ({assignments.length})</summary>
+            <summary>Current backend assignments ({filteredAssignments.length})</summary>
             <div className="educator-form-grid">
-              <label>Student filter<input value={filterStudentId} onChange={e => setFilterStudentId(e.target.value)} placeholder="All students" /></label>
+              <label>Student filter (ID, email, or name)<input value={filterStudentId} onChange={e => setFilterStudentId(e.target.value)} placeholder="Search ID or email (e.g. 16 or student@example.com)" /></label>
+              <label>Assignment ID<input value={filterAssignmentId} onChange={e => setFilterAssignmentId(e.target.value)} placeholder="e.g. 58 or #58" inputMode="numeric" /></label>
               <label>Status filter<select value={filterStatus} onChange={e => setFilterStatus(e.target.value as Status | '')}><option value="">All statuses</option>{statuses.map(s => <option key={s} value={s}>{s.replace('_', ' ')}</option>)}</select></label>
             </div>
             <button type="button" disabled={loading || saving} onClick={() => void handleFilter()}>Apply Filters / Refresh</button>
-            {loading ? <p>Loading...</p> : assignments.length === 0 ? <p>No assignments loaded.</p> : <div className="educator-scroll"><table className="educator-table">
+            {loading ? <p>Loading...</p> : filteredAssignments.length === 0 ? <p>No assignments match your filters.</p> : <div className="educator-scroll"><table className="educator-table">
               <thead><tr><th>ID</th><th>Student</th><th>Scenario</th><th>Persona</th><th>Status</th><th>Actions</th></tr></thead>
-              <tbody>{assignments.map(a => <tr key={a.id}><td>#{a.id}</td><td>{studentTitle(a.studentId)}</td><td>{scenarioTitle(a.scenarioId)}</td><td>{a.personaId ? personaTitle(a.personaId) : 'Unspecified'}</td><td><StatusBadge status={a.status}/>{a.archived ? ' (Archived)' : ''}</td><td><div className="educator-row-actions"><Link to={`/conversations?assignmentId=${a.id}`} className="educator-link-button">Audit</Link><button type="button" className="educator-danger" disabled={saving} onClick={() => void handleUnassignIndividual(a)}>Unassign</button></div></td></tr>)}</tbody>
+              <tbody>{filteredAssignments.map(a => <tr key={a.id}><td>#{a.id}</td><td>{studentWithId(a.studentId)}</td><td>{scenarioTitle(a.scenarioId)}</td><td>{a.personaId ? personaTitle(a.personaId) : 'Unspecified'}</td><td><StatusBadge status={a.status}/>{a.archived ? ' (Archived)' : ''}</td><td><div className="educator-row-actions"><Link to={`/conversations?assignmentId=${a.id}`} className="educator-link-button">Audit</Link><button type="button" className="educator-danger" disabled={saving} onClick={() => void handleUnassignIndividual(a)}>Unassign</button></div></td></tr>)}</tbody>
             </table></div>}
           </details>
         </section>
