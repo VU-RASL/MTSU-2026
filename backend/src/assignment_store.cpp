@@ -10,7 +10,7 @@
 namespace {
 
 const char* kColumns = "select=id,created_at,scenario_id,persona_id,student_id,"
-					   "assigned_by,status,archived_at";
+					   "assigned_by,status,archived_at,class_id,module_id";
 
 // One database row -> Assignment. Throws if Supabase sends something unexpected.
 Assignment fromRow(const crow::json::rvalue& row) {
@@ -62,6 +62,17 @@ Assignment fromRow(const crow::json::rvalue& row) {
         throw std::runtime_error("Supabase returned an invalid assignment archive time");
     }
     a.archived = row["archived_at"].t() != type::Null;
+
+    // where the assignment came from (null unless a class gave it out)
+    for (const char* key : {"class_id", "module_id"}) {
+        if (!row.has(key)) continue;
+        const auto& v = row[key];
+        if (v.t() == type::Null) continue;
+        if (v.t() != type::Number || v.d() < 1 || v.d() > std::numeric_limits<int>::max()) {
+            throw std::runtime_error("Supabase returned an invalid assignment class or module");
+        }
+        (std::string(key) == "class_id" ? a.classId : a.moduleId) = static_cast<int>(v.i());
+    }
     
     return a;
 }

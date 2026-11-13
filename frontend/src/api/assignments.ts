@@ -10,6 +10,8 @@ export type Assignment = {
   assignedBy: string
   archived: boolean
   status: Status
+  classId: number | null   // set when a class gave this out
+  moduleId: number | null  // set when it came from a module
 }
 
 // GET /api/assignments  (a student only sees their own; optional filters)
