@@ -26,6 +26,10 @@ crow::json::wvalue toJson(const Assignment& a) {
         out["assignedBy"] = a.assignedBy;
     }
     out["status"] = a.status;
+    if (a.classId > 0) out["classId"] = a.classId;
+    else out["classId"] = nullptr;
+    if (a.moduleId > 0) out["moduleId"] = a.moduleId;
+    else out["moduleId"] = nullptr;
     return out;
 }
 

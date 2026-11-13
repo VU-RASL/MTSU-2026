@@ -26,6 +26,8 @@ struct Assignment {
     std::string studentId;              // text until the user tables exist
     std::string assignedBy;             // educator's user id; empty = unknown
     std::string status = "assigned";
+    int classId = 0;                    // 0 = not from a class
+    int moduleId = 0;                   // 0 = not from a module
 };
 
 // True for "assigned", "in_progress", "completed", "reviewed".
