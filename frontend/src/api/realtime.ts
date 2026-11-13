@@ -23,5 +23,10 @@ export const getRealtimeSession = (sessionId: string) =>
   api<RealtimeSession>(`/api/realtime/session/${sessionId}`)
 
 // POST /api/realtime/session/<id>/end  (safe to call more than once)
-export const endRealtimeSession = (sessionId: string) =>
-  api<RealtimeSession>(`/api/realtime/session/${sessionId}/end`, { method: 'POST' })
+// complete: true when the student pressed "End conversation", which marks the
+// attempt and the assignment complete. Leaving the page ends without completing.
+export const endRealtimeSession = (sessionId: string, complete = false) =>
+  api<RealtimeSession & { completed?: boolean }>(
+    `/api/realtime/session/${sessionId}/end`,
+    complete ? jsonBody('POST', { complete: true }) : { method: 'POST' }
+  )

@@ -77,6 +77,7 @@
 #include "session_result_store.h"     // SessionResultStore (Educator Portal)
 #include "educator_routes.h"          // registerEducatorRoutes()
 #include "conversation_routes.h"      // registerConversationRoutes()
+#include "class_routes.h"             // registerClassRoutes()
 #include "realtime_setup.h"
 
 // Helpers private to this file.
@@ -594,6 +595,9 @@ int main() {
 
     // Saved conversation trees (practice attempts); see conversation_routes.cpp
     registerConversationRoutes(app, assignments);
+
+    // Classes, modules, and the student picker (issue #73); see class_routes.cpp
+    registerClassRoutes(app);
 
     // -------------------------------------------------------------------------
     // 3. Start the server

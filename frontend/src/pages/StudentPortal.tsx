@@ -101,6 +101,18 @@ const StudentPortal: React.FC = () => {
                     Continue Conversation
                   </button>
                 )}
+
+                {(a.status === 'completed' || a.status === 'reviewed') && (
+                  <button type="button" style={{ marginTop: '12px' }} onClick={() => navigate(`/rtc?assignmentId=${a.id}`)}>
+                    Practice Again
+                  </button>
+                )}
+
+                {a.status !== 'assigned' && (
+                  <button type="button" style={{ marginTop: '8px' }} onClick={() => navigate(`/conversations?assignmentId=${a.id}`)}>
+                    View My Conversations
+                  </button>
+                )}
               </div>
             ))}
           </div>
