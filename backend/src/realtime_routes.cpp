@@ -6,6 +6,7 @@
 #include "assignment_context.h"
 #include "patient_instructions.h"
 #include "realtime_transport.h"
+#include "supabase_client.h"
 
 namespace {
 
@@ -170,7 +171,35 @@ void registerRealtimeRoutes(EducatorApp& app, RealtimeSetup& setup) {
             const auto user = currentUser(req);
             if (!user) return failure(401, "Login required");
 
-            return crow::response(200, setup.end(*user, uuid(id)));
+            const auto sessionId = uuid(id);
+
+            // {"complete": true} = the student pressed End, which marks the
+            // attempt and assignment complete. Leaving the page or a failed
+            // start ends the call without completing anything.
+            bool complete = false;
+            if (!req.body.empty()) {
+                const auto body = parseBody(req.body);
+                complete = body.has("complete") &&
+                           body["complete"].t() == crow::json::type::True;
+            }
+
+            auto ended = setup.end(*user, sessionId);
+
+            if (complete && user->role == Role::Student) {
+                try {
+                    crow::json::wvalue args;
+                    args["p_session"] = sessionId;
+                    SupabaseClient db;
+                    const auto marked = crow::json::load(db.request(
+                        "POST", "rpc/vera_complete_conversation", args.dump()));
+                    ended["completed"] =
+                        marked && marked.t() == crow::json::type::True;
+                } catch (const std::exception&) {
+                    ended["completed"] = false;
+                }
+            }
+
+            return crow::response(200, ended);
         });
     });
 }

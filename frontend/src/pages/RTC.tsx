@@ -62,6 +62,7 @@ const RTC: React.FC = () => {
   const [error, setError] = useState('')
   const [lines, setLines] = useState<Line[]>([])
   const [typed, setTyped] = useState('')
+  const [completed, setCompleted] = useState(false)
   const [secondsLeft, setSecondsLeft] = useState<number | null>(null)
   const [mouthLevel, setMouthLevel] = useState(0)
 
@@ -207,6 +208,7 @@ const RTC: React.FC = () => {
     setError('')
     setLines([])
     setPhase('connecting')
+    setCompleted(false)
     try {
       // Created during the click, so the browser allows audio to play.
       audioCtxRef.current = new AudioContext()
@@ -262,12 +264,16 @@ const RTC: React.FC = () => {
   // ---------------------------------------------------------------------------
   // End
   // ---------------------------------------------------------------------------
-  const end = useCallback(async () => {
+  // complete = the student pressed End (marks the assignment complete)
+  const end = useCallback(async (complete = false) => {
     setPhase('ending')
     const id = sessionIdRef.current
     closeLocal()
     try {
-      if (id) await endRealtimeSession(id)
+      if (id) {
+        const result = await endRealtimeSession(id, complete)
+        setCompleted(Boolean(result.completed))
+      }
       sessionIdRef.current = null
       setPhase('ended')
     } catch (cause) {
@@ -344,7 +350,7 @@ const RTC: React.FC = () => {
                 )}
                 {phase === 'connecting' && <span role="status">Connecting…</span>}
                 {live && (
-                  <button type="button" onClick={() => void end()}>End conversation</button>
+                  <button type="button" onClick={() => void end(true)}>End conversation</button>
                 )}
                 {phase === 'ending' && <span role="status">Ending…</span>}
                 {live && <span style={{ color: 'var(--text)' }}>{timeLeft}</span>}
@@ -367,7 +373,7 @@ const RTC: React.FC = () => {
               {error && <p role="alert" style={{ color: '#b42318' }}>{error}</p>}
               {phase === 'ended' && (
                 <p role="status">
-                  Conversation ended and saved. <Link to={`/conversations?assignmentId=${assignmentId}`}>View saved conversation</Link> · <Link to="/student-portal">Back to your assignments</Link>
+                  Conversation ended and saved{completed ? ' — assignment marked complete' : ''}. <Link to={`/conversations?assignmentId=${assignmentId}`}>View saved conversation</Link> · <Link to="/student-portal">Back to your assignments</Link>
                 </p>
               )}
 

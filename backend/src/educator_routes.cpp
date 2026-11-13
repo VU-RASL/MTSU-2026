@@ -185,6 +185,12 @@ void registerEducatorRoutes(EducatorApp& app, AssignmentStore& assignments,
             return jsonError(403, "Students can only set status to in_progress");
         }
 
+        // practicing a finished assignment again doesn't undo "completed"
+        if (user->role == Role::Student &&
+            (assignment->status == "completed" || assignment->status == "reviewed")) {
+            return crow::response(200, toJson(*assignment));
+        }
+
         if (!assignments.setStatus(id, status)) return jsonError(404, "Assignment not found");
         assignment->status = status;
         return crow::response(200, toJson(*assignment));
