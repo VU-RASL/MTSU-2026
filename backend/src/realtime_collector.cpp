@@ -544,6 +544,18 @@ void RealtimeCollector::finish(
     if (rpc("vera_finish_collection", body).t() != Type::True) {
         throw CollectorLeaseLost();
     }
+
+    // Copy this call's lines into its conversation tree
+    // (database/15_conversation_tree.sql). If this fails, the tree routes
+    // retry it the next time anyone opens the tree, so just log it.
+    try {
+        Value build;
+        build["p_session"] = id_;
+        rpc("vera_build_conversation_nodes", build);
+    } catch (const std::exception&) {
+        std::cerr << "[realtime collector] tree copy deferred: "
+                  << id_ << '\n';
+    }
 }
 
 std::vector<std::string> RealtimeCollector::recoverable() {

@@ -9,6 +9,7 @@ export type RealtimeSession = {
   status: string
   deadlineAt: string   // ISO time the backend ends the call
   sdp?: string         // OpenAI's WebRTC answer (only when starting)
+  conversationId?: string // the saved conversation tree this call adds lines to
 }
 
 // POST /api/realtime/session  (students only, for their own assignment)
