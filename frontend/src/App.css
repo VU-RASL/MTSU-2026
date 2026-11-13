@@ -611,3 +611,19 @@ select {
 button:not(.header-menu-toggle):not([style*="color"]) {
   color: #ffffff;
 }
+
+/* Educator Portal: API-connected enrollment and audit actions */
+.educator-unified .educator-inline-controls,
+.educator-unified .educator-inline-row,
+.educator-unified .educator-row-actions {
+  display: flex; align-items: center; flex-wrap: wrap; gap: 10px; margin: 12px 0;
+}
+.educator-unified .educator-inline-row { justify-content: space-between; border-top: 1px solid #e5e5e5; padding-top: 10px; }
+.educator-unified .educator-inline-controls select { flex: 1 1 220px; min-width: 0; padding: 11px; border: 1px solid #d1af72; border-radius: 8px; background: #fff; color: #222; }
+.educator-unified .educator-chips span { display: inline-flex; align-items: center; gap: 8px; }
+.content .educator-unified .educator-chip-remove { padding: 1px 7px; border-radius: 5px; background: #9c3232; font-size: .9rem; }
+.educator-unified .educator-student-grid label span { display: flex; flex-direction: column; overflow-wrap: anywhere; }
+.educator-unified .educator-student-grid small { font-weight: 400; color: #687383; }
+.educator-unified .educator-row-actions { margin: 0; flex-wrap: nowrap; }
+.educator-unified .educator-row-actions .educator-link-button,
+.educator-unified .educator-row-actions button { padding: 7px 11px; font-size: .9rem; white-space: nowrap; }
