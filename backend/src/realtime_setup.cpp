@@ -73,7 +73,7 @@ crow::json::wvalue publicSession(const crow::json::rvalue& row) {
 struct RealtimeSetup::Impl {
     struct Running {
         int assignmentId = 0;
-        std::string id, student, offer, answer, call;
+        std::string id, student, offer, answer, call, conversation;
         std::time_t deadline = 0;
         std::atomic<bool> stop{false}, shutdown{false}, done{false};
         std::unique_ptr<RealtimeChannel> channel;
@@ -551,6 +551,7 @@ std::pair<int, crow::json::wvalue> RealtimeSetup::start(
 
         auto body = publicSession(row);
         body["sdp"] = live->answer;
+        body["conversationId"] = live->conversation;
         return {200, std::move(body)};
     }
 
@@ -622,6 +623,16 @@ std::pair<int, crow::json::wvalue> RealtimeSetup::start(
     bool collectorAttempted = false;
 
     try {
+        // Link this call to a conversation tree (database/15_conversation_tree.sql).
+        // For now every call starts a new practice attempt; resume/rewind will
+        // pass an existing conversation and starting line here.
+        crow::json::wvalue attach;
+        attach["p_session"] = live->id;
+        const auto link = state.request(
+            "POST", "rpc/vera_attach_conversation", attach.dump()
+        );
+        live->conversation = textField(link, "conversationId");
+
         crow::json::wvalue config;
         config["type"] = "realtime";
         config["model"] = state.model;
@@ -655,6 +666,7 @@ std::pair<int, crow::json::wvalue> RealtimeSetup::start(
 
         auto body = publicSession(state.row(user, live->id));
         body["sdp"] = live->answer;
+        body["conversationId"] = live->conversation;
 
         state.running.emplace(cacheKey, live);
 
