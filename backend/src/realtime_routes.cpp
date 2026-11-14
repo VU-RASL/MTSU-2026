@@ -144,11 +144,29 @@ void registerRealtimeRoutes(EducatorApp& app, RealtimeSetup& setup) {
                 return failure(400, "Expected a bounded audio SDP offer");
             }
 
+            // Optional: continue a saved attempt (resume), from one of its
+            // lines (rewind). Leave both out for a new attempt.
+            std::string conversationId;
+            std::string fromNodeId;
+            if (body.has("conversationId") &&
+                body["conversationId"].t() != crow::json::type::Null) {
+                conversationId = uuid(stringField(body, "conversationId"));
+            }
+            if (body.has("fromNodeId") &&
+                body["fromNodeId"].t() != crow::json::type::Null) {
+                if (conversationId.empty()) {
+                    return failure(400, "fromNodeId needs a conversationId");
+                }
+                fromNodeId = uuid(stringField(body, "fromNodeId"));
+            }
+
             auto result = setup.start(
                 *user,
                 static_cast<int>(body["assignmentId"].i()),
                 key,
-                offer
+                offer,
+                conversationId,
+                fromNodeId
             );
 
             return crow::response(result.first, result.second);
