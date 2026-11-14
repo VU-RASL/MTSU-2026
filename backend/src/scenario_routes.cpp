@@ -49,6 +49,40 @@ std::optional<crow::response> requireEducator(const crow::request& req) {
 }
 
 void registerScenarioRoutes(EducatorApp& app, ScenarioStore& scenarios) {
+    CROW_ROUTE(app, "/api/scenarios/schema").methods("GET"_method)
+    ([] {
+        std::vector<crow::json::wvalue> fields;
+        auto addField = [&fields](
+            const char* path,
+            const char* label,
+            const char* type,
+            bool required = false,
+            bool multiple = false
+        ) {
+            crow::json::wvalue field;
+            field["path"] = path;
+            field["label"] = label;
+            field["type"] = type;
+            field["required"] = required;
+            field["multiple"] = multiple;
+            fields.push_back(std::move(field));
+        };
+
+        addField("title", "Scenario Title", "text", true);
+        addField("summary", "Summary", "textarea");
+        addField("setting", "Setting", "textarea");
+        addField("difficulty", "Difficulty", "text");
+        addField("estimatedTime", "Estimated Time (minutes)", "number");
+        addField("learningObjectives", "Learning Objectives", "textarea", false, true);
+        addField("patientSituation", "Patient Situation", "textarea");
+        addField("instructions", "Instructions", "textarea");
+        addField("requiredTasks", "Required Tasks", "textarea", false, true);
+
+        crow::json::wvalue response;
+        response["fields"] = std::move(fields);
+        return crow::response(200, std::move(response));
+    });
+
     CROW_ROUTE(app, "/api/scenarios").methods("GET"_method)
     ([&scenarios](const crow::request& req) {
         // any signed-in user; students get the student view

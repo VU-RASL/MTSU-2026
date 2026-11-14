@@ -20,8 +20,11 @@ const Home: React.FC = () => {
             <div className="content">
                 <div className="home-content">
                     <h1>Welcome to Project Vera</h1>
+                    <p>Through our platform, users can simulate real time conversations with virtual patients.</p>
+
                     <p>Our misson is to create a digital environment for medical professionals to practice and create scenarios for autism diagnosis and treatment.</p>
-                    <button onClick={personaButton}>Create Persona</button>
+                    <p>This allows instructors to evaluate and provide feedback on the performance of medical professionals in a safe and controlled environment.</p>
+                    <p>Studies have shown that medical professionals who had many opportunities to practice in a simulated environment demonstrated improved skills and confidence in real world settings.</p>
 
                 </div>
             </div>
