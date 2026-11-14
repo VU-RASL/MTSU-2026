@@ -1,7 +1,6 @@
 // =============================================================================
 // RTC.tsx: the student's voice conversation with the AI patient
 // =============================================================================
-//
 // Open with /rtc?assignmentId=12 (the Student Portal's buttons do this).
 //   &conversationId=...  continue a saved attempt (resume)
 //   &fromNodeId=...      ...from one of its lines (rewind)
@@ -76,8 +75,61 @@ type RealtimeEvent = {
 }
 
 const wait = (ms: number) => new Promise((resolve) => window.setTimeout(resolve, ms))
+
 const message = (cause: unknown, fallback: string) =>
   cause instanceof Error ? cause.message : fallback
+
+function friendlyError(cause: unknown, fallback: string): string {
+  const raw = cause instanceof Error ? cause.message : String(cause ?? '')
+  const lower = raw.toLowerCase()
+
+  if (cause instanceof DOMException) {
+    switch (cause.name) {
+      case 'NotFoundError':
+      case 'DevicesNotFoundError':
+        return 'No microphone was found. Please connect a microphone or turn it on in your computer settings, then try again.'
+      case 'NotAllowedError':
+      case 'PermissionDeniedError':
+        return 'Microphone access was blocked. Allow the microphone for this site and try again.'
+      case 'NotReadableError':
+      case 'TrackStartError':
+        return 'Your microphone is currently in use by another app (such as Zoom, Teams, or Discord). Close that app and try again.'
+      case 'OverconstrainedError':
+        return 'Your microphone settings are not supported by this browser. Try selecting a different microphone in your device settings.'
+      case 'AbortError':
+        return 'Microphone setup was interrupted before it finished. Please try starting the conversation again.'
+      case 'NotSupportedError':
+        return 'Your browser does not support voice calls or audio playback here. Try using an updated version of Chrome, Edge, or Safari.'
+    }
+  }
+
+  if (lower.includes('requested device not found')) {
+    return 'No microphone was found. Please connect a microphone or turn it on in your computer settings, then try again.'
+  }
+  if (lower.includes('permission denied') || lower.includes('not allowed')) {
+    return 'Microphone access was blocked. Allow the microphone for this site and try again.'
+  }
+  if (lower.includes('failed to fetch') || lower.includes('networkerror') || lower.includes('network request failed')) {
+    return 'Could not reach the server. Check your internet connection and make sure the app is running, then try again.'
+  }
+  if (lower.includes('401') || lower.includes('unauthorized') || lower.includes('token')) {
+    return 'Your login session expired. Please refresh the page or log in again to continue.'
+  }
+  if (lower.includes('403') || lower.includes('forbidden')) {
+    return 'You do not have permission to access this assignment. Make sure you are signed in with the right student account.'
+  }
+  if (lower.includes('404') || lower.includes('not found')) {
+    return 'This assignment or conversation could not be found. Go back to the Student Portal and open it again.'
+  }
+  if (lower.includes('500') || lower.includes('502') || lower.includes('503') || lower.includes('internal server error')) {
+    return 'The voice service ran into a temporary server problem. Wait a few seconds and click Resume to try again.'
+  }
+  if (lower.includes('ice') || lower.includes('sdp') || lower.includes('peerconnection') || lower.includes('webrtc')) {
+    return 'Could not establish a live audio connection (network or firewall blocked WebRTC). Check your connection and try again.'
+  }
+
+  return raw ? `${fallback}: ${raw}` : fallback
+}
 
 const RTC: React.FC = () => {
   const [params, setParams] = useSearchParams()
@@ -199,7 +251,7 @@ const RTC: React.FC = () => {
         if (event.item_id && event.text !== undefined) setText(event.item_id, 'patient', event.text)
         return
       case 'error':
-        setError(event.error?.message ?? 'The conversation reported an error')
+        setError(friendlyError(event.error?.message, 'The conversation reported an error'))
         return
       default:
         return
@@ -216,7 +268,6 @@ const RTC: React.FC = () => {
     analyser.fftSize = 512
     ctx.createMediaStreamSource(stream).connect(analyser)
     const samples = new Uint8Array(analyser.fftSize)
-
     const tick = () => {
       analyser.getByteTimeDomainData(samples)
       let sum = 0
@@ -325,11 +376,12 @@ const RTC: React.FC = () => {
           session = await startRealtimeSession(assignmentId, crypto.randomUUID(), offer.sdp ?? '', continueFrom)
         } catch (cause) {
           if (!message(cause, '').startsWith('Still saving') || attempt === 9) throw cause
-          setStatus('Saving your last call…')
+          setStatus('Saving your last call...')
           await wait(1500)
         }
       }
       if (!session?.sdp) throw new Error('The server did not return a connection answer')
+
       sessionIdRef.current = session.sessionId
       lastSessionRef.current = session.sessionId
       deadlineRef.current = Date.parse(session.deadlineAt)
@@ -340,11 +392,7 @@ const RTC: React.FC = () => {
       setStatus('')
       setPhase('live')
     } catch (cause) {
-      setError(
-        cause instanceof DOMException && cause.name === 'NotAllowedError'
-          ? 'Microphone access was blocked. Allow the microphone for this site and try again.'
-          : message(cause, 'Could not start the conversation'),
-      )
+      setError(friendlyError(cause, 'Could not start the conversation'))
       setStatus('')
       closeLocal()
       // A session may exist on the server even though setup failed here.
@@ -373,7 +421,7 @@ const RTC: React.FC = () => {
       sessionIdRef.current = null
       setPhase(mode === 'complete' ? 'ended' : 'paused')
     } catch (cause) {
-      setError(message(cause, 'Could not end the conversation cleanly'))
+      setError(friendlyError(cause, 'Could not end the conversation cleanly'))
       setPhase('error')
     }
   }, [closeLocal])
@@ -388,7 +436,7 @@ const RTC: React.FC = () => {
       setCompleted(Boolean(result.completed))
       setPhase('ended')
     } catch (cause) {
-      setError(message(cause, 'Could not mark the assignment complete'))
+      setError(friendlyError(cause, 'Could not mark the assignment complete'))
       setPhase('paused')
     }
   }
@@ -400,10 +448,11 @@ const RTC: React.FC = () => {
   async function continueFrom(line: Line) {
     if (!conversationId) return
     if (phase === 'live') await stop('pause')
+
     let nodeId = line.nodeId
     if (!nodeId) {
       setPhase('connecting')
-      setStatus('Saving your last call…')
+      setStatus('Saving your last call...')
       for (let attempt = 0; attempt < 12 && !nodeId; attempt++) {
         try {
           const tree = await getConversationTree(conversationId)
@@ -422,6 +471,7 @@ const RTC: React.FC = () => {
         return
       }
     }
+
     await connect(conversationId, nodeId)
   }
 
@@ -517,14 +567,12 @@ const RTC: React.FC = () => {
                 {(phase === 'paused' || phase === 'ended' || phase === 'error') && (
                   <button type="button" onClick={newAttempt}>Start a new attempt</button>
                 )}
-
                 {live && <button type="button" onClick={() => void stop('pause')}>Pause</button>}
                 {live && (
                   <button type="button" onClick={() => void stop('complete')}>End conversation</button>
                 )}
-
-                {phase === 'connecting' && <span role="status">{status || 'Connecting…'}</span>}
-                {phase === 'ending' && <span role="status">Hanging up…</span>}
+                {phase === 'connecting' && <span role="status">{status || 'Connecting...'}</span>}
+                {phase === 'ending' && <span role="status">Hanging up...</span>}
                 {live && <span style={{ color: 'var(--text)' }}>{timeLeft}</span>}
               </div>
 
@@ -543,9 +591,11 @@ const RTC: React.FC = () => {
               </div>
 
               {error && <p role="alert" style={{ color: '#b42318' }}>{error}</p>}
+
               {phase === 'paused' && (
                 <p role="status">Paused. Your spot is saved. Resume whenever you're ready.</p>
               )}
+
               {phase === 'ended' && (
                 <p role="status">
                   Conversation ended and saved{completed ? ' — assignment marked complete' : ''}.{' '}
@@ -614,7 +664,7 @@ const RTC: React.FC = () => {
                 <input
                   id="typed-message"
                   style={{ flex: 1 }}
-                  placeholder={live ? 'Or type a message…' : 'Start the conversation to type'}
+                  placeholder={live ? 'Or type a message...' : 'Start the conversation to type'}
                   value={typed}
                   disabled={!live}
                   onChange={(e) => setTyped(e.target.value)}
