@@ -26,6 +26,54 @@ std::string textField(const crow::json::rvalue& value, const char* key) {
     return std::string(value[key].s());
 }
 
+// Resume / rewind: append the branch's lines to the patient instructions.
+// Keeps the newest lines if the whole history won't fit in the 32 KB limit.
+void addConversationSoFar(PatientInstructions& instructions,
+                          const crow::json::rvalue& lines) {
+    if (lines.t() != crow::json::type::List || lines.size() == 0) return;
+
+    const std::string header =
+        "\n\n# Conversation so far\n"
+        "This conversation already started: the student paused, or went back "
+        "to an earlier point to try something different. Below is everything "
+        "said so far on this path, oldest first. Treat it as what really "
+        "happened. Stay consistent with it, do not greet the student again or "
+        "repeat yourself, and continue naturally from the last line. If the "
+        "last line is the student's, answer it.\n";
+    const std::string omitted = "(Earlier lines left out.)\n";
+
+    constexpr std::size_t kLimit = 32 * 1024 - 64;
+    const std::size_t base = instructions.text.size() + header.size() + omitted.size();
+    if (base >= kLimit) return;
+
+    std::vector<std::string> kept;
+    std::size_t used = 0;
+    bool dropped = false;
+
+    for (std::size_t i = lines.size(); i-- > 0;) {
+        const auto& line = lines[i];
+        std::string text = textField(line, "text");
+        for (char& c : text) if (c == '\n' || c == '\r') c = ' ';
+        const std::string who =
+            textField(line, "sender") == "student" ? "Student" : "Patient";
+        std::string entry = who + ": " + text + "\n";
+
+        if (base + used + entry.size() > kLimit) {
+            dropped = true;
+            break;
+        }
+        used += entry.size();
+        kept.push_back(std::move(entry));
+    }
+
+    std::string block = header;
+    if (dropped) block += omitted;
+    for (auto it = kept.rbegin(); it != kept.rend(); ++it) block += *it;
+
+    instructions.text += block;
+    instructions.scenarioSnapshot["instructions"] = instructions.text;
+}
+
 std::string environment(const char* name) {
     const char* value = std::getenv(name);
     return value ? value : "";
@@ -495,7 +543,8 @@ RealtimeSetup::~RealtimeSetup() {
 
 std::pair<int, crow::json::wvalue> RealtimeSetup::start(
     const CurrentUser& user, int assignmentId,
-    const std::string& requestKey, const std::string& offer
+    const std::string& requestKey, const std::string& offer,
+    const std::string& conversationId, const std::string& fromNodeId
 ) {
     auto& state = *impl_;
     std::lock_guard<std::mutex> lock(state.mutex);
@@ -581,7 +630,34 @@ std::pair<int, crow::json::wvalue> RealtimeSetup::start(
         user, assignmentId,
         state.assignments, state.personas, state.scenarios
     );
-    const auto instructions = buildPatientInstructions(context);
+    auto instructions = buildPatientInstructions(context);
+
+    // Resume / rewind: give the patient this branch's lines so far
+    // (database/17_conversation_resume.sql).
+    if (!conversationId.empty()) {
+        crow::json::wvalue args;
+        args["p_conversation"] = conversationId;
+        if (fromNodeId.empty()) args["p_from_node"] = nullptr;
+        else args["p_from_node"] = fromNodeId;
+        args["p_student"] = user.id;
+        args["p_assignment"] = assignmentId;
+
+        const auto history = state.request(
+            "POST", "rpc/vera_conversation_history", args.dump()
+        );
+        const auto code = textField(history, "code");
+
+        if (code == "saving") {
+            throw RealtimeError(
+                409, "Still saving your last call. Try again in a moment."
+            );
+        }
+        if (code != "ok") {
+            throw RealtimeError(404, "Conversation or line not found");
+        }
+
+        addConversationSoFar(instructions, history["lines"]);
+    }
 
     crow::json::wvalue reserve;
     reserve["p_student"] = user.id;
@@ -624,10 +700,14 @@ std::pair<int, crow::json::wvalue> RealtimeSetup::start(
 
     try {
         // Link this call to a conversation tree (database/15_conversation_tree.sql).
-        // For now every call starts a new practice attempt; resume/rewind will
-        // pass an existing conversation and starting line here.
+        // No conversationId = a new practice attempt; otherwise this call
+        // continues that attempt from its bookmark or from fromNodeId.
         crow::json::wvalue attach;
         attach["p_session"] = live->id;
+        if (!conversationId.empty()) {
+            attach["p_conversation"] = conversationId;
+            if (!fromNodeId.empty()) attach["p_from_node"] = fromNodeId;
+        }
         const auto link = state.request(
             "POST", "rpc/vera_attach_conversation", attach.dump()
         );

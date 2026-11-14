@@ -164,7 +164,7 @@ void registerConversationRoutes(EducatorApp& app, AssignmentStore& assignments) 
         const auto nodes = SupabaseClient::parseRows(db.request(
             "GET",
             "dialogue_nodes?conversation_id=eq." + id +
-            "&select=id,parent_id,sender,text,created_at,status"
+            "&select=id,parent_id,sender,text,created_at,status,item_id"
             "&order=created_at.asc,id.asc"));
 
         // childrenIds in the order the lines were said
@@ -196,6 +196,8 @@ void registerConversationRoutes(EducatorApp& app, AssignmentStore& assignments) 
             out["text"] = text(node, "text");
             out["timestamp"] = text(node, "created_at");
             out["status"] = text(node, "status");
+            // OpenAI's id for the line (lets the voice page find a line it just showed)
+            out["itemId"] = textOrNull(node["item_id"]);
 
             std::vector<Value> kids;
             for (const auto& kid : children[nodeId]) kids.emplace_back(kid);

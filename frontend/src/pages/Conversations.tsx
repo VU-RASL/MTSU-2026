@@ -1,8 +1,9 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
-import { useSearchParams } from 'react-router-dom'
+import { Link, useSearchParams } from 'react-router-dom'
 import PageLayout from '../components/PageLayout'
 import ConversationTreeView from '../components/ConversationTreeView'
 import { getActiveConversationPath } from '../utils/treeUtils'
+import { getCurrentUser } from '../api/auth'
 import {
   getConversationTree,
   listConversations,
@@ -37,6 +38,15 @@ export default function Conversations() {
   const [selectedNodeId, setSelectedNodeId] = useState<string | undefined>()
   const [error, setError] = useState('')
   const [loading, setLoading] = useState(false)
+  const [isStudent, setIsStudent] = useState(false)
+
+  // Students can continue their own conversation from any line;
+  // educators only look.
+  useEffect(() => {
+    getCurrentUser()
+      .then(user => setIsStudent(user?.role === 'student'))
+      .catch(() => setIsStudent(false))
+  }, [])
 
   const openTree = useCallback(async (conversationId: string) => {
     setError('')
@@ -146,6 +156,16 @@ export default function Conversations() {
 
           <section>
             <h2>Conversation to this line</h2>
+            {isStudent && selectedNodeId && (
+              <p>
+                <Link
+                  to={`/rtc?assignmentId=${tree.assignmentId}&conversationId=${tree.conversationId}&fromNodeId=${selectedNodeId}`}
+                  style={{ ...buttonStyle, display: 'inline-block', textDecoration: 'none' }}
+                >
+                  ↩ Continue from this line
+                </Link>
+              </p>
+            )}
             {path.map(node => (
               <p key={node.id} style={{ margin: '6px 0' }}>
                 <strong>
