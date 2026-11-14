@@ -28,6 +28,7 @@ export const listConversations = (assignmentId: number) =>
   api<ConversationSummary[]>(`/api/assignments/${assignmentId}/conversations`)
 
 // GET /api/conversations/<id>/tree
-// Each node also has status: 'completed' | 'interrupted' (cut off mid-sentence).
+// Each node also has status: 'completed' | 'interrupted' (cut off mid-sentence)
+// and itemId: OpenAI's id for the line (null for the root).
 export const getConversationTree = (conversationId: string) =>
   api<SavedConversationTree>(`/api/conversations/${conversationId}/tree`)

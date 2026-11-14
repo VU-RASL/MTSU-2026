@@ -15,8 +15,21 @@ export type RealtimeSession = {
 // POST /api/realtime/session  (students only, for their own assignment)
 // requestKey: a random UUID per attempt. Sending the same key again returns
 // the same session instead of starting a second call.
-export const startRealtimeSession = (assignmentId: number, requestKey: string, sdp: string) =>
-  api<RealtimeSession>('/api/realtime/session', jsonBody('POST', { assignmentId, requestKey, sdp }))
+// continueFrom: leave out for a new practice attempt. To resume a saved
+// attempt pass its conversationId; to rewind, also pass the line (fromNodeId)
+// to continue from. The patient is given that branch's lines so far.
+// If the previous call is still being saved the server answers 409
+// "Still saving..."; wait a moment and try again.
+export const startRealtimeSession = (
+  assignmentId: number,
+  requestKey: string,
+  sdp: string,
+  continueFrom?: { conversationId: string; fromNodeId?: string },
+) =>
+  api<RealtimeSession>(
+    '/api/realtime/session',
+    jsonBody('POST', { assignmentId, requestKey, sdp, ...continueFrom }),
+  )
 
 // GET /api/realtime/session/<id>
 export const getRealtimeSession = (sessionId: string) =>

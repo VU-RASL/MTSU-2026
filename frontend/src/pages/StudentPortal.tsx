@@ -97,7 +97,7 @@ const StudentPortal: React.FC = () => {
                 )}
 
                 {a.status === 'in_progress' && (
-                  <button type="button" style={{ marginTop: '12px' }} onClick={() => navigate(`/rtc?assignmentId=${a.id}`)}>
+                  <button type="button" style={{ marginTop: '12px' }} onClick={() => navigate(`/rtc?assignmentId=${a.id}&resume=1`)}>
                     Continue Conversation
                   </button>
                 )}
