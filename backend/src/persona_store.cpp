@@ -247,6 +247,7 @@ std::vector<Persona> PersonaStore::list(const std::string& search) const {
     while (true) {
         const auto rows = parseRows(request("GET", 
                                             "personas?select=id,created_at,title,data"
+                                            "&archived_at=is.null"  // hidden personas stay out of lists
                                             "&order=id.asc&limit=500&id=gt." +
                                             std::to_string(lastId)));
 
