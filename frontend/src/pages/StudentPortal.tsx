@@ -30,7 +30,8 @@ const StudentPortal: React.FC = () => {
       .finally(() => setLoading(false))
   }, [])
 
-  const filtered = assignments.filter((a) =>
+  // archived (hidden) assignments don't show to students
+  const filtered = assignments.filter((a) => !a.archived).filter((a) =>
     `scenario ${a.scenarioId} ${a.status}`.toLowerCase().includes(searchTerm.toLowerCase())
   )
 
