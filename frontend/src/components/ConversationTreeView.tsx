@@ -132,7 +132,7 @@ export default function ConversationTreeView({
 
         <div style={{ position: 'relative', maxHeight: '480px', overflowY: 'auto', overflowX: 'auto', padding: '10px 0' }}>
           {/* SVG Rails & Connections */}
-          <svg width={svgWidth} height={svgHeight} style={{ position: 'absolute', top: '10px', left: 0, pointerEvents: 'none', zIndex: 1 }}>
+          <svg width={svgWidth} height={svgHeight} style={{ position: 'absolute', top: '10px', left: '12px', pointerEvents: 'none', zIndex: 1 }}>
             {orderedNodes.map((node, nodeIdx) => {
               const lane = nodeLanes[node.id] ?? 0
               const x = xOffset + lane * laneWidth
@@ -161,8 +161,7 @@ export default function ConversationTreeView({
                   )
                 }
 
-                const midY = (y + childY) / 2
-                const d = `M ${x} ${y} C ${x} ${midY}, ${childX} ${midY}, ${childX} ${childY}`
+                const d = `M ${x} ${y} C ${x} ${y + rowHeight * 0.55}, ${childX} ${y + rowHeight * 0.25}, ${childX} ${childY}`
                 return (
                   <path
                     key={`${node.id}-${childId}`}
