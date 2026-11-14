@@ -27,6 +27,8 @@ import { Link, useSearchParams } from 'react-router-dom'
 import Footer from '../components/Footer'
 import Header from '../components/Header'
 import { endRealtimeSession, startRealtimeSession } from '../api/realtime'
+import { Unity, useUnityContext } from 'react-unity-webgl'
+import { emitAvatarState, useAvatarBridge } from '../AvatarState'
 
 type Phase = 'idle' | 'connecting' | 'live' | 'ending' | 'ended' | 'error'
 
@@ -64,6 +66,28 @@ const RTC: React.FC = () => {
   const [typed, setTyped] = useState('')
   const [secondsLeft, setSecondsLeft] = useState<number | null>(null)
   const [mouthLevel, setMouthLevel] = useState(0)
+
+  // The Unity avatar (WebGL build in public/unity/UMA/Build).
+  // The voice still plays through <audio> below, Unity just moves the mouth
+  const { unityProvider, sendMessage, isLoaded, loadingProgression, unload } = useUnityContext({
+    loaderUrl: '/unity/UMA/Build/UMA.loader.js',
+    dataUrl: '/unity/UMA/Build/UMA.data',
+    frameworkUrl: '/unity/UMA/Build/UMA.framework.js',
+    codeUrl: '/unity/UMA/Build/UMA.wasm',
+  })
+  useAvatarBridge(isLoaded, sendMessage)
+
+  // Bug Catchers
+  useEffect(() => {
+    if (isLoaded) (window as any).unitySend = sendMessage
+    let last = performance.now()
+    const id = window.setInterval(() => {
+      const now = performance.now()
+      if (now - last > 500) console.warn(`[rtc] main thread stalled ~${Math.round(now - last - 100)} ms`)
+      last = now
+    }, 100)
+    return () => window.clearInterval(id)
+  }, [isLoaded, sendMessage])
 
   // Connection pieces live in refs: they change without needing a re-render.
   const pcRef = useRef<RTCPeerConnection | null>(null)
@@ -145,6 +169,12 @@ const RTC: React.FC = () => {
       case 'response.output_text.done':
         if (event.item_id && event.text !== undefined) setText(event.item_id, 'patient', event.text)
         return
+      case 'input_audio_buffer.speech_started':
+        emitAvatarState('listening')
+        return
+      case 'input_audio_buffer.speech_stopped':
+        emitAvatarState('idle')
+        return
       case 'error':
         setError(event.error?.message ?? 'The conversation reported an error')
         return
@@ -164,7 +194,8 @@ const RTC: React.FC = () => {
     ctx.createMediaStreamSource(stream).connect(analyser)
     const samples = new Uint8Array(analyser.fftSize)
 
-    const tick = () => {
+    let lastUi = 0
+    const tick = (now: number) => {
       analyser.getByteTimeDomainData(samples)
       let sum = 0
       for (const s of samples) {
@@ -172,11 +203,16 @@ const RTC: React.FC = () => {
         sum += centered * centered
       }
       const level = Math.min(1, Math.sqrt(sum / samples.length) * 4)
-      setMouthLevel(level)
+
+      // React bar: ~10 updates/sec is plenty
+      if (now - lastUi > 100) {
+        lastUi = now
+        setMouthLevel(level)
+      }
       window.dispatchEvent(new CustomEvent('vera-mouth-level', { detail: level }))
       frameRef.current = requestAnimationFrame(tick)
     }
-    tick()
+    frameRef.current = requestAnimationFrame(tick)
   }, [])
 
   // ---------------------------------------------------------------------------
@@ -197,6 +233,7 @@ const RTC: React.FC = () => {
     deadlineRef.current = null
     setSecondsLeft(null)
     setMouthLevel(0)
+    emitAvatarState('idle')
     window.dispatchEvent(new CustomEvent('vera-mouth-level', { detail: 0 }))
   }, [])
 
@@ -204,60 +241,70 @@ const RTC: React.FC = () => {
   // Start
   // ---------------------------------------------------------------------------
   async function start() {
-    setError('')
-    setLines([])
-    setPhase('connecting')
-    try {
-      // Created during the click, so the browser allows audio to play.
-      audioCtxRef.current = new AudioContext()
+  setError('')
+  setLines([])
+  setPhase('connecting')
 
-      const mic = await navigator.mediaDevices.getUserMedia({ audio: true })
-      micRef.current = mic
+  const t0 = performance.now()
+  const mark = (label: string) =>
+    console.log(`[rtc] ${label}: ${Math.round(performance.now() - t0)} ms`)
 
-      const pc = new RTCPeerConnection()
-      pcRef.current = pc
-      pc.ontrack = (event) => {
-        const [stream] = event.streams
-        if (audioRef.current) audioRef.current.srcObject = stream
-        startMouthMeter(stream)
-      }
-      pc.onconnectionstatechange = () => {
-        if (pc.connectionState === 'failed') {
-          setError('The connection dropped. End the conversation and start again.')
-        }
-      }
-      mic.getTracks().forEach((track) => pc.addTrack(track, mic))
+  try {
+    // Created during the click, so the browser allows audio to play.
+    audioCtxRef.current = new AudioContext()
+    mark('AudioContext')
 
-      const channel = pc.createDataChannel('oai-events')
-      channelRef.current = channel
-      channel.onmessage = (message) => handleEvent(String(message.data))
+    const mic = await navigator.mediaDevices.getUserMedia({ audio: true })
+    micRef.current = mic
+    mark('getUserMedia')
 
-      const offer = await pc.createOffer()
-      await pc.setLocalDescription(offer)
-
-      const session = await startRealtimeSession(assignmentId, crypto.randomUUID(), offer.sdp ?? '')
-      if (!session.sdp) throw new Error('The server did not return a connection answer')
-      sessionIdRef.current = session.sessionId
-      deadlineRef.current = Date.parse(session.deadlineAt)
-
-      await pc.setRemoteDescription({ type: 'answer', sdp: session.sdp })
-      setPhase('live')
-    } catch (cause) {
-      const message = cause instanceof Error ? cause.message : 'Could not start the conversation'
-      setError(
-        cause instanceof DOMException && cause.name === 'NotAllowedError'
-          ? 'Microphone access was blocked. Allow the microphone for this site and try again.'
-          : message,
-      )
-      closeLocal()
-      // A session may exist on the server even though setup failed here.
-      if (sessionIdRef.current) {
-        await endRealtimeSession(sessionIdRef.current).catch(() => undefined)
-        sessionIdRef.current = null
-      }
-      setPhase('error')
+    const pc = new RTCPeerConnection()
+    pcRef.current = pc
+    pc.ontrack = (event) => {
+      const [stream] = event.streams
+      if (audioRef.current) audioRef.current.srcObject = stream
+      startMouthMeter(stream)
     }
+    pc.onconnectionstatechange = () => {
+      if (pc.connectionState === 'failed') {
+        setError('The connection dropped. End the conversation and start again.')
+      }
+    }
+    mic.getTracks().forEach((track) => pc.addTrack(track, mic))
+
+    const channel = pc.createDataChannel('oai-events')
+    channelRef.current = channel
+    channel.onmessage = (message) => handleEvent(String(message.data))
+
+    const offer = await pc.createOffer()
+    await pc.setLocalDescription(offer)
+    mark('offer ready')
+
+    const session = await startRealtimeSession(assignmentId, crypto.randomUUID(), offer.sdp ?? '')
+    mark('backend session')
+    if (!session.sdp) throw new Error('The server did not return a connection answer')
+    sessionIdRef.current = session.sessionId
+    deadlineRef.current = Date.parse(session.deadlineAt)
+
+    await pc.setRemoteDescription({ type: 'answer', sdp: session.sdp })
+    mark('remote description')
+    setPhase('live')
+  } catch (cause) {
+    const message = cause instanceof Error ? cause.message : 'Could not start the conversation'
+    setError(
+      cause instanceof DOMException && cause.name === 'NotAllowedError'
+        ? 'Microphone access was blocked. Allow the microphone for this site and try again.'
+        : message,
+    )
+    closeLocal()
+    // A session may exist on the server even though setup failed here.
+    if (sessionIdRef.current) {
+      await endRealtimeSession(sessionIdRef.current).catch(() => undefined)
+      sessionIdRef.current = null
+    }
+    setPhase('error')
   }
+}
 
   // ---------------------------------------------------------------------------
   // End
@@ -311,6 +358,32 @@ const RTC: React.FC = () => {
     if (id) void endRealtimeSession(id).catch(() => undefined)
   }, [closeLocal])
 
+  // Forward the mouth level to Unity (GameObject "AvatarBridge", method
+  // SetMouthLevel(float)). Limited to ~30 updates a second; Unity smooths it.
+  useEffect(() => {
+    if (!isLoaded) return
+    let last = 0
+    let lastLevel = -1
+    const onLevel = (event: Event) => {
+      const level = (event as CustomEvent<number>).detail
+      const now = performance.now()
+      // Always pass 0 through so the mouth closes when the patient stops.
+      if (level !== 0) {
+        if (now - last < 50) return
+        if (Math.abs(level - lastLevel) < 0.03) return
+      } 
+      last = now
+      lastLevel = level
+      console.log('to unity', level.toFixed(2))
+    }
+    window.addEventListener('vera-mouth-level', onLevel)
+    return () => window.removeEventListener('vera-mouth-level', onLevel)
+  }, [isLoaded, sendMessage])
+ 
+  // Free the WebGL instance when leaving the page (needed in a single-page app,
+  // otherwise coming back to this page can fail to load Unity a second time).
+  useEffect(() => () => { void unload().catch(() => undefined) }, [unload])
+ 
   // Keep the newest line in view.
   useEffect(() => {
     transcriptEndRef.current?.scrollIntoView({ behavior: 'smooth', block: 'nearest' })
@@ -350,7 +423,14 @@ const RTC: React.FC = () => {
                 {live && <span style={{ color: 'var(--text)' }}>{timeLeft}</span>}
               </div>
 
-              {/* Patient view: Unity character goes here; the bar shows mouth level for now. */}
+              <div style={{ position: 'relative', width: '100%', maxWidth: 640, aspectRatio: '16 / 9', marginTop: 16 }}>
+                {!isLoaded && (
+                  <p role="status" style={{ position: 'absolute', inset: 0, display: 'grid', placeItems: 'center', margin: 0 }}>
+                  Loading patient… {Math.round(loadingProgression * 100)}%
+                  </p>
+                )}
+                <Unity unityProvider={unityProvider} style={{ width: '100%', height: '100%', visibility: isLoaded ? 'visible' : 'hidden' }} />
+              </div>
               <div
                 aria-label="Patient speaking level"
                 style={{
