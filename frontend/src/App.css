@@ -1,4 +1,11 @@
 /* header and footer styles */
+.uma-avatar { margin-top: 16px; width: 100%; max-width: 960px; }
+.uma-avatar-stage { position: relative; overflow: hidden; border: 1px solid var(--border); border-radius: 12px; background: #111827; }
+.uma-avatar-canvas { display: block; }
+.uma-avatar-loading { position: absolute; inset: auto 0 0; padding: 10px; background: rgba(17,24,39,.84); color: #fff; text-align: center; }
+.uma-mouth-meter { margin-top: 10px; height: 8px; overflow: hidden; border-radius: 8px; background: var(--border); }
+.uma-mouth-meter > div { height: 100%; background: #1f67a5; transition: width 50ms linear; }
+
 .header {
   position: relative;
   background-color: var(--header-bg);
