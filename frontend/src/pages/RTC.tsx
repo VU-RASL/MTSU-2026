@@ -36,6 +36,7 @@ import React, { useCallback, useEffect, useRef, useState } from 'react'
 import { Link, useSearchParams } from 'react-router-dom'
 import Footer from '../components/Footer'
 import Header from '../components/Header'
+import UmaAvatar from '../components/UmaAvatar'
 import { endRealtimeSession, startRealtimeSession } from '../api/realtime'
 import { getConversationTree, listConversations } from '../api/conversations'
 import { getActiveConversationPath } from '../utils/treeUtils'
@@ -576,19 +577,7 @@ const RTC: React.FC = () => {
                 {live && <span style={{ color: 'var(--text)' }}>{timeLeft}</span>}
               </div>
 
-              {/* Patient view: Unity character goes here; the bar shows mouth level for now. */}
-              <div
-                aria-label="Patient speaking level"
-                style={{
-                  marginTop: '16px',
-                  height: '10px',
-                  borderRadius: '5px',
-                  background: 'var(--border)',
-                  overflow: 'hidden',
-                }}
-              >
-                <div style={{ width: `${Math.round(mouthLevel * 100)}%`, height: '100%', background: '#1f67a5' }} />
-              </div>
+              <UmaAvatar mouthLevel={mouthLevel} />
 
               {error && <p role="alert" style={{ color: '#b42318' }}>{error}</p>}
 

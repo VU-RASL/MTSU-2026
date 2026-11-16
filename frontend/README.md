@@ -19,6 +19,16 @@ reads the project-level `.env`; only variables prefixed with `VITE_` are
 available to browser code. Never use a `VITE_` prefix for the Supabase secret
 key.
 
+## UMA/Unity patient avatar
+
+The student voice-conversation page loads the UMA WebGL build from
+`frontend/public/unity/UMA/Build/`. `VITE_UMA_MODEL_URL` is the build base path
+without a file extension (default `/unity/UMA/Build/UMA`). The React page uses
+that base path to load the `.loader.js`, `.data`, `.framework.js`, and `.wasm`
+files. It sends the live audio level as a three-decimal string to the Unity
+object `ReactBridge`, method `ReceiveFromReact`, and emits a `uma:puppet` browser
+event with `{ mouthLevel }` in `detail`.
+
 After sign-in, the shared API helper sends the Supabase access token to the
 backend as a bearer token. Supabase persists and refreshes the browser session.
 

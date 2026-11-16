@@ -1,0 +1,2 @@
+frontend/public/unity/UMA/Build/*.data filter=lfs diff=lfs merge=lfs -text
+*.wasm filter=lfs diff=lfs merge=lfs -text
