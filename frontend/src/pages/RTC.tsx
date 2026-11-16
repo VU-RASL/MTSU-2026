@@ -37,8 +37,9 @@ import { Link, useSearchParams } from 'react-router-dom'
 import Footer from '../components/Footer'
 import Header from '../components/Header'
 import UmaAvatar from '../components/UmaAvatar'
+import ConversationTreeView from '../components/ConversationTreeView'
 import { endRealtimeSession, startRealtimeSession } from '../api/realtime'
-import { getConversationTree, listConversations } from '../api/conversations'
+import { getConversationTree, listConversations, type SavedConversationTree } from '../api/conversations'
 import { getActiveConversationPath } from '../utils/treeUtils'
 
 type Phase =
@@ -146,6 +147,12 @@ const RTC: React.FC = () => {
   const [secondsLeft, setSecondsLeft] = useState<number | null>(null)
   const [mouthLevel, setMouthLevel] = useState(0)
 
+  // Conversation tree panel state (hidden by default so it doesn't distract during an assessment)
+  const [showTree, setShowTree] = useState(false)
+  const [savedTree, setSavedTree] = useState<SavedConversationTree | null>(null)
+  const [selectedTreeNodeId, setSelectedTreeNodeId] = useState<string | undefined>()
+  const [treeLoading, setTreeLoading] = useState(false)
+
   // The saved practice attempt this page is continuing (null = a new one).
   const [conversationId, setConversationId] = useState<string | null>(params.get('conversationId'))
   const startLineRef = useRef<string | null>(params.get('fromNodeId'))
@@ -169,6 +176,31 @@ const RTC: React.FC = () => {
     if (id) next.conversationId = id
     setParams(next, { replace: true })
   }, [assignmentId, setParams])
+
+  // Load or refresh the saved conversation tree when toggled open or after a call saves.
+  const refreshSavedTree = useCallback(async (convId: string) => {
+    setTreeLoading(true)
+    try {
+      const loaded = await getConversationTree(convId)
+      setSavedTree(loaded)
+      setSelectedTreeNodeId((prev) => (prev && loaded.nodes[prev] ? prev : loaded.activeNodeId))
+    } catch {
+      // Ignore transient save delays right after hanging up
+    } finally {
+      setTreeLoading(false)
+    }
+  }, [])
+
+  useEffect(() => {
+    if (!conversationId) {
+      setSavedTree(null)
+      setSelectedTreeNodeId(undefined)
+      return
+    }
+    if (showTree || phase === 'paused' || phase === 'ended') {
+      void refreshSavedTree(conversationId)
+    }
+  }, [conversationId, showTree, phase, refreshSavedTree])
 
   // "Continue Conversation" from the Student Portal: pick the newest
   // in-progress attempt, if there is one.
@@ -309,7 +341,9 @@ const RTC: React.FC = () => {
   // (or the attempt's bookmark).
   async function savedLines(convId: string, fromNodeId?: string | null): Promise<Line[]> {
     const tree = await getConversationTree(convId)
+    setSavedTree(tree)
     const target = fromNodeId ?? tree.activeNodeId
+    setSelectedTreeNodeId(target)
     return getActiveConversationPath({ ...tree, activeNodeId: target })
       .filter((n) => n.sender !== 'system')
       .map((n) => ({
@@ -476,6 +510,12 @@ const RTC: React.FC = () => {
     await connect(conversationId, nodeId)
   }
 
+  async function continueFromTreeNode(nodeId: string) {
+    if (!conversationId || !nodeId) return
+    if (phase === 'live') await stop('pause')
+    await connect(conversationId, nodeId)
+  }
+
   function newAttempt() {
     rememberConversation(null)
     void connect(null)
@@ -596,7 +636,58 @@ const RTC: React.FC = () => {
               )}
 
               <section aria-label="Transcript" style={{ marginTop: '16px' }}>
-                <h2 style={{ fontSize: '18px' }}>Transcript</h2>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '12px', flexWrap: 'wrap', marginBottom: '8px' }}>
+                  <h2 style={{ fontSize: '18px', margin: 0 }}>Transcript</h2>
+                  <button
+                    type="button"
+                    onClick={() => setShowTree((prev) => !prev)}
+                    aria-expanded={showTree}
+                    style={{ fontSize: '13px', padding: '6px 12px' }}
+                  >
+                    {showTree ? 'Hide Conversation Tree' : 'Show Conversation Tree'}
+                  </button>
+                </div>
+
+                {showTree && (
+                  <div style={{ marginBottom: '16px' }}>
+                    {!conversationId && (
+                      <p style={{ fontSize: '13px', color: 'var(--text)', margin: '0 0 8px' }}>
+                        Start the conversation first—once saved or paused, your branching conversation tree will appear here.
+                      </p>
+                    )}
+                    {conversationId && treeLoading && !savedTree && (
+                      <p style={{ fontSize: '13px', color: 'var(--text)', margin: '0 0 8px' }}>
+                        Loading conversation tree...
+                      </p>
+                    )}
+                    {conversationId && savedTree && (
+                      <>
+                        <ConversationTreeView
+                          tree={savedTree}
+                          selectedNodeId={selectedTreeNodeId}
+                          onNodeSelect={setSelectedTreeNodeId}
+                        />
+                        {canRewind && selectedTreeNodeId && (
+                          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '12px', flexWrap: 'wrap', marginTop: '8px' }}>
+                            <span style={{ fontSize: '13px', color: 'var(--text)' }}>
+                              {live
+                                ? 'Note: live lines appear in the tree once you pause or end this turn.'
+                                : 'Click any node in the tree above to branch off from that turn.'}
+                            </span>
+                            <button
+                              type="button"
+                              onClick={() => void continueFromTreeNode(selectedTreeNodeId)}
+                              style={{ fontSize: '13px', padding: '6px 12px' }}
+                            >
+                              ↩ Continue from selected tree node
+                            </button>
+                          </div>
+                        )}
+                      </>
+                    )}
+                  </div>
+                )}
+
                 {canRewind && lines.length > 0 && (
                   <p style={{ fontSize: '13px', margin: '0 0 6px', color: 'var(--text)' }}>
                     Want to try something different? Use <strong>Continue from here</strong> on any line.
