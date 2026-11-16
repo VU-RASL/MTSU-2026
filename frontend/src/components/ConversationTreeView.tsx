@@ -211,7 +211,7 @@ export default function ConversationTreeView({
               <div
                 key={node.id}
                 onClick={() => {
-                  if (!readOnly && onNodeSelect) {
+                  if (onNodeSelect) {
                     onNodeSelect(node.id)
                   }
                 }}
@@ -220,7 +220,7 @@ export default function ConversationTreeView({
                   alignItems: 'center',
                   height: `${rowHeight}px`,
                   padding: '0 12px',
-                  cursor: readOnly ? 'default' : 'pointer',
+                  cursor: onNodeSelect ? 'pointer' : 'default',
                   transition: 'background 0.15s',
                   background: isCurrentHead ? 'rgba(59, 130, 246, 0.14)' : 'transparent'
                 }}

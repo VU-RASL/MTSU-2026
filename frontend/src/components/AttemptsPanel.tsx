@@ -1,5 +1,12 @@
 import { useEffect, useState } from 'react'
 import { listResults, reviewResult, type Result, type Status } from '../api/results'
+import {
+  getConversationTree,
+  listConversations,
+  type ConversationSummary,
+  type SavedConversationTree,
+} from '../api/conversations'
+import ConversationTreeView from './ConversationTreeView'
 import './AssignmentReview.css'
 
 const STATUS_LABELS: Record<Status, string> = {
@@ -26,15 +33,39 @@ export default function AttemptsPanel({
   onReviewed?: (assignmentId: number) => void
 }) {
   const [results, setResults] = useState<Result[]>([])
+  const [conversations, setConversations] = useState<ConversationSummary[]>([])
+  const [tree, setTree] = useState<SavedConversationTree | null>(null)
+  const [selectedNodeId, setSelectedNodeId] = useState<string | undefined>()
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
   const [score, setScore] = useState<Record<number, string>>({})
   const [feedback, setFeedback] = useState<Record<number, string>>({})
 
+  async function openTree(conversationId: string) {
+    try {
+      const loaded = await getConversationTree(conversationId)
+      setTree(loaded)
+      setSelectedNodeId(loaded.activeNodeId)
+    } catch (e) {
+      setError((e as Error).message)
+    }
+  }
+
   useEffect(() => {
     setLoading(true)
-    listResults(assignmentId)
-      .then(setResults)
+    Promise.all([
+      listResults(assignmentId),
+      listConversations(assignmentId).catch(() => [] as ConversationSummary[]),
+    ])
+      .then(async ([res, convs]) => {
+        setResults(res)
+        setConversations(convs)
+        if (convs.length > 0) {
+          const loaded = await getConversationTree(convs[0].id)
+          setTree(loaded)
+          setSelectedNodeId(loaded.activeNodeId)
+        }
+      })
       .catch((e: Error) => setError(e.message))
       .finally(() => setLoading(false))
   }, [assignmentId])
@@ -60,7 +91,35 @@ export default function AttemptsPanel({
   return (
     <div>
       {error && <p style={{ color: 'crimson' }}>Error: {error}</p>}
-      {results.length === 0 && !error && <p>No attempts yet.</p>}
+      {results.length === 0 && conversations.length === 0 && !error && <p>No attempts yet.</p>}
+
+      {conversations.length > 0 && (
+        <div style={{ marginTop: 12 }}>
+          <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginBottom: 10 }}>
+            {conversations.map((c, i) => (
+              <button
+                key={c.id}
+                type="button"
+                onClick={() => void openTree(c.id)}
+                style={{
+                  fontWeight: tree?.conversationId === c.id ? 700 : 400,
+                  border: tree?.conversationId === c.id ? '2px solid #a855f7' : undefined,
+                }}
+              >
+                Attempt {conversations.length - i} · {c.status === 'completed' ? 'Completed' : 'In progress'} ({c.lineCount} lines)
+              </button>
+            ))}
+          </div>
+          {tree && (
+            <ConversationTreeView
+              tree={tree}
+              selectedNodeId={selectedNodeId}
+              onNodeSelect={setSelectedNodeId}
+              readOnly
+            />
+          )}
+        </div>
+      )}
 
       {results.map((r) => (
         <div
