@@ -56,6 +56,7 @@ services:
       retries: 5
       # Allow initial compilation time before counting check failures.
       start_period: 120s
+    restart: unless-stopped
 
   # Vite development server for the React app.
   frontend:
@@ -90,6 +91,7 @@ services:
       backend:
         # Start frontend only after the backend health check passes.
         condition: service_healthy
+    restart: unless-stopped
 
 # Declare named volumes managed by Docker; they survive container removal.
 volumes:
