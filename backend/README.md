@@ -1,29 +1,42 @@
-# Personas and Scenarios API (C++ / Crow)
+# VERA backend API (C++ / Crow)
 
-The backend API for creating, listing, editing, and deleting personas and scenarios.
+The server behind the app: logins and roles, personas, scenarios, learning
+topics, classes and modules, assignments, voice calls with the AI patient, and
+saved conversation trees.
 
 - **Framework:** [Crow](https://crowcpp.org) 1.3.5 (included in `crow/`)
 - **Port:** 18080 by default
-- **Storage:** Supabase for personas; scenarios are held in memory for now
+- **Storage:** Supabase (Postgres) for everything. Set up with [docs/database-setup.md](../docs/database-setup.md)
+- **Logins:** Supabase Auth. Every route except `/api/health` and `/api/scenarios/schema` needs `Authorization: Bearer <token>`
+- **Voice:** OpenAI Realtime API. The server creates each call with its own key, so the key never reaches the browser
+
+> **Most people should run it with Docker** (`docker compose up --build` from the
+> repo root; see the [README](../README.md)). The steps below are for running the
+> backend directly on your computer.
 
 ---
 
 ## 1. Install the prerequisites
 
-You need a C++17 compiler, CMake 3.15 or newer, and the **asio** library. Crow is already in the repo, so you don't need to download it.
+You need a C++17 compiler, CMake 3.15 or newer, **asio**, and **libcurl**
+(with WebSocket support, curl 8.11 or newer, for voice). Crow is already in the
+repo, so you don't need to download it.
 
 **macOS**
 
 ```bash
 xcode-select --install       # compiler (skip if already installed)
-brew install cmake asio
+brew install cmake asio curl
 ```
 
 **Linux (Ubuntu/Debian)**
 
 ```bash
-sudo apt install g++ cmake libasio-dev
+sudo apt install g++ cmake libasio-dev libcurl4-openssl-dev
 ```
+
+Debian 12 / older Ubuntu ship a curl without WebSocket support. Voice calls will
+fail there; everything else works. (The Docker image uses Debian 13 for this reason.)
 
 **Windows:** the easiest path is WSL (Ubuntu). Then follow the Linux steps.
 
@@ -44,7 +57,11 @@ You know it worked when the last line says `[100%] Built target server`.
 
 ## 3. Run
 
+The server reads its settings from environment variables (the same names as the
+root `.env`). Load them, then start it:
+
 ```bash
+set -a; source ../.env; set +a      # loads SUPABASE_* and OPENAI_* into this terminal
 ./build-server/server
 ```
 
@@ -66,35 +83,81 @@ In a **second terminal**:
 curl http://localhost:18080/api/health
 # {"status":"ok"}
 
-curl http://localhost:18080/api/personas
-# a list with one sample persona (Gloria) that loads on startup
+curl -i http://localhost:18080/api/personas
+# 401 {"error":"Login required"}: auth is on. Use the app to test real routes.
 ```
 
 ---
 
 ## API
 
-All routes send and receive JSON.
+All routes send and receive JSON and (except `/api/health` and
+`/api/scenarios/schema`) need a logged-in
+user: `Authorization: Bearer <Supabase access token>`. The frontend adds this for
+you (`frontend/src/api/http.ts`).
 
-| Method | Route | What it does |
-|---|---|---|
-| GET | `/api/health` | Checks that the server is up |
-| GET | `/api/personas` | Lists all personas. Add `?search=text` to filter. |
-| GET | `/api/personas/schema` | Returns persona form fields with descriptions and JSON paths. |
-| GET | `/api/personas/:id` | Gets one persona |
-| POST | `/api/personas` | Creates a persona (`title` is required) |
-| PUT | `/api/personas/:id` | Updates a persona. Only the fields you send change. |
-| DELETE | `/api/personas/:id` | Deletes a persona |
-| GET | `/api/scenarios` | Lists scenarios. Add `?search=text` to filter by title. |
-| GET | `/api/scenarios/schema` | Returns scenario form field definitions. |
-| GET | `/api/scenarios/:id` | Gets one scenario. |
-| POST | `/api/scenarios` | Creates a scenario (`title` is required). |
-| PUT | `/api/scenarios/:id` | Updates a scenario. Only the fields you send change. |
-| DELETE | `/api/scenarios/:id` | Deletes a scenario. |
+**Who** = minimum role. *Educator* routes also allow admins. Educators only see
+and change their own classes, modules and assignments; admins see all.
 
-Scenarios are stored in the backend process and reset when the server restarts.
-They do not require a Supabase table. The personas API continues to use the
-existing Supabase `personas` table.
+| Method | Route | Who | What it does |
+|---|---|---|---|
+| GET | `/api/health` | anyone | Is the server up? |
+| GET | `/api/auth/me` | any user | Your profile id and role |
+| **Personas** | | | |
+| GET | `/api/personas` | educator | List personas (`?search=text`) |
+| GET | `/api/personas/schema` | educator | Persona form fields |
+| GET / PUT / DELETE | `/api/personas/:id` | educator | Get / update (only fields sent) / delete one |
+| POST | `/api/personas` | educator | Create (`title` required) |
+| **Scenarios** | | | |
+| GET | `/api/scenarios` | any user | List (`?search=text`). Students get a trimmed view |
+| GET | `/api/scenarios/schema` | anyone | Scenario form fields |
+| GET | `/api/scenarios/:id` | any user | Get one |
+| POST / PUT / DELETE | `/api/scenarios`, `/api/scenarios/:id` | educator | Create / update / delete |
+| **Learning topics** | | | |
+| GET | `/api/learning-topics`, `/api/learning-topics/:id` | any user | List / get |
+| POST / PUT / DELETE | `/api/learning-topics`, `/api/learning-topics/:id` | educator | Create / update / delete |
+| **Classes and modules** ([docs](../docs/educator-portal.md)) | | | |
+| GET | `/api/students` | educator | Real student accounts (`id`, `email`, `name`) |
+| GET / POST | `/api/modules` | educator | List / create (`name`, `scenarioId`, `personaId`) |
+| DELETE | `/api/modules/:id` | educator | Remove from all classes (keeps started work), then hide |
+| GET / POST | `/api/classes` | educator | List / create (`courseCode`, `section`, `studentIds`) |
+| DELETE | `/api/classes/:id` | educator | Delete class (keeps started work) |
+| POST | `/api/classes/:id/students` | educator | Add a student; they get the class's modules |
+| DELETE | `/api/classes/:id/students/:studentId` | educator | Remove a student (keeps started work) |
+| POST | `/api/classes/:id/modules` | educator | Assign a module: one assignment per student |
+| DELETE | `/api/classes/:id/modules/:moduleId` | educator | Unassign (keeps started work) |
+| **Assignments** | | | |
+| GET | `/api/assignments` | any user | Students: their own. Educators: ones they assigned |
+| POST | `/api/assignments` | educator | Assign one scenario + persona to one student |
+| GET / PUT / DELETE | `/api/assignments/:id` | owner | Get / change status / delete |
+| GET | `/api/assignments/:id/context` | owner | Scenario + persona for the voice page |
+| GET | `/api/assignments/:id/instructions` | educator | Preview the AI patient's instructions |
+| GET / POST | `/api/assignments/:id/results` | owner | Legacy session results |
+| GET / PUT | `/api/results/:id`, `/api/results/:id/review` | owner / educator | Legacy result + review |
+| **Voice** ([how it works](#voice-calls)) | | | |
+| POST | `/api/realtime/session` | student | Start a call: `{assignmentId, requestKey, sdp, conversationId?, fromNodeId?}` |
+| GET | `/api/realtime/session/:id` | student (own call) | Call status |
+| POST | `/api/realtime/session/:id/end` | student (own call) | Hang up. `{"complete": true}` also marks the assignment complete |
+| **Conversation trees** ([docs](../docs/conversation-tree.md)) | | | |
+| GET | `/api/assignments/:id/conversations` | owner | Every practice attempt, newest first |
+| GET | `/api/conversations/:id/tree` | owner | One attempt as a `ConversationTree` |
+
+*Owner* = the student the assignment belongs to, or the educator who assigned it.
+
+Errors come back as `{"error": "message"}`: 400 bad input, 401 not logged in,
+403 wrong role, 404 not found (also used for "not yours"), 409 try again shortly
+(e.g. "Still saving your last call"), 5xx server/Supabase/OpenAI problem.
+
+### Voice calls
+
+1. The browser makes a WebRTC offer and sends it to `POST /api/realtime/session`.
+2. The backend checks the student and assignment, builds the patient's
+   instructions (persona + scenario, plus "conversation so far" when resuming or
+   rewinding), creates the call at OpenAI with the server key, and returns OpenAI's answer.
+3. Audio then flows directly between the browser and OpenAI. The backend listens
+   in on the call over a WebSocket and saves each transcript line.
+4. When the call ends, the lines are copied into that attempt's dialogue tree.
+   Pause/resume and rewind start a new call that continues the same attempt.
 
 The persona schema includes the full set of persona details and returns each
 field's description, section, input type, and nested JSON path. The create form
@@ -133,7 +196,7 @@ The JSON is nested to match the sections on the persona page:
   "emotionalWellbeing": [], "socialDeterminantsOfHealth": [], "promptsAndSpecialInstructions": []
 }
 ```
-## AGE = -1 MEANS AGE HAS NOT BEEN SET YET 
+`identity.age` of `-1` means the age hasn't been set yet.
 
 Errors come back as `{"error": "message"}` with a 400 (bad input), 404 (record not found), or 500 (storage/request failure).
 
@@ -141,14 +204,17 @@ Errors come back as `{"error": "message"}` with a 400 (bad input), 404 (record n
 
 ## Connecting the frontend
 
-CORS is set up for the Vite dev server at `http://localhost:5173`, so React can call the API directly:
+The frontend calls relative URLs like `/api/personas`, and Vite forwards them
+to the backend (see [DOCKER.md](../DOCKER.md#how-requests-reach-the-backend)). Use
+the helpers in `frontend/src/api/` (they add the login token):
 
-```js
-const res = await fetch("http://localhost:18080/api/personas");
-const personas = await res.json();
+```ts
+import { api } from './http'
+const personas = await api<Persona[]>('/api/personas')
 ```
 
-Run both at the same time: the backend in one terminal, `npm run dev` in `frontend/` in another.
+Without Docker: run the backend in one terminal and `npm run dev` in `frontend/`
+in another.
 
 ---
 
@@ -156,12 +222,22 @@ Run both at the same time: the backend in one terminal, `npm run dev` in `fronte
 
 ```
 backend/
-├── CMakeLists.txt
-├── crow/Crow-1.3.5/      Crow framework (don't edit)
+├── CMakeLists.txt         add new .cpp files to the source list here
+├── Dockerfile
+├── crow/Crow-1.3.5/       Crow framework (don't edit)
 └── src/
-    ├── main.cpp           routes: matches each request to the right handler
-    ├── persona.h/.cpp     the Persona data and its JSON conversion
-    └── persona_store.h/.cpp   in-memory storage (thread-safe)
+    ├── main.cpp                   startup, health, personas, learning topics; registers the other route files
+    ├── auth.h/.cpp                verifies the Supabase token, finds/creates the profile, roles
+    ├── supabase_client.h/.cpp     small HTTP client for Supabase's REST API
+    ├── persona*.h/.cpp            persona data, JSON conversion, storage
+    ├── scenario*.h/.cpp           scenario data, routes, storage
+    ├── learning_topic*.h/.cpp     learning topics
+    ├── educator_routes.h/.cpp     assignments and legacy results
+    ├── assignment*.h/.cpp         assignment data, storage, access rules
+    ├── class_routes.h/.cpp        students, modules, classes
+    ├── conversation_routes.h/.cpp saved conversation trees
+    ├── patient_instructions.*     builds the AI patient's instructions
+    └── realtime_*.h/.cpp          voice: start/end calls, transcript collector
 ```
 
 **Adding a new persona field:** add it to the `Persona` struct in `persona.h`, then add one row to the field table at the top of `persona.cpp`. Nothing else needs to change.
@@ -178,6 +254,12 @@ The build isn't using C++17. Make sure `CMakeLists.txt` has `set(CMAKE_CXX_STAND
 
 **`Could not find asio`**
 Install it (step 1), then delete `build-server/` and rebuild.
+
+**Server exits with `Missing Supabase environment variables`**
+The environment variables aren't loaded in this terminal. See step 3.
+
+**Voice start fails with "needs WSS support"**
+Your libcurl is too old for WebSockets. Use Docker, or install a newer curl (step 1).
 
 **`address already in use`**
 A server is already running on that port. Stop it with Ctrl+C, or on Mac/Linux run `lsof -ti :18080 | xargs kill`.
