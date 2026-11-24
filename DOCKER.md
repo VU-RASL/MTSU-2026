@@ -99,6 +99,12 @@ settings in one place:
 | `BACKEND_PORT` | `18080` | The port for direct API requests from your computer. |
 | `API_PROXY_TARGET` | `http://backend:18080` | The address Vite uses to reach the API from inside its container. |
 
+The app also needs your Supabase and OpenAI settings in the root `.env`
+(`SUPABASE_URL`, `SUPABASE_SECRET_KEY`, `SUPABASE_PUBLISHABLE_KEY`,
+`VITE_SUPABASE_URL`, `VITE_SUPABASE_PUBLISHABLE_KEY`, `OPENAI_API_KEY`,
+`OPENAI_REALTIME_MODEL`). Compose refuses to start without the Supabase ones.
+Copy [`.env.example`](.env.example) and see the [README](README.md#3-create-env).
+
 For a shared default change, edit the value after `:-` in that section. For
 example, `${FRONTEND_PORT:-5173}` uses 5173 unless an override is set. The YAML
 `&frontend-port` gives that setting a name; `*frontend-port` reuses it in the
@@ -172,10 +178,7 @@ For a step-by-step explanation, see the FAQ:
 [How does a relative API URL reach the backend?](#how-does-a-relative-api-url-reach-the-backend)
 
 The Vite config also defaults to `http://localhost:18080` when running without
-Docker. This accommodates the proxy proposed in PR #10 without requiring that
-PR's merge or its persona model changes. When combining changes later, keep the
-configurable proxy target. The current sample UI still needs API calls added
-where appropriate; a proxy alone does not connect its sample data to the backend.
+Docker.
 
 ## Practical verification
 
@@ -190,17 +193,14 @@ docker compose ps
 curl --fail http://localhost:18080/api/health
 curl --fail http://localhost:5173/api/health
 
-# List personas and create a test persona through the proxy.
-curl --fail http://localhost:5173/api/personas
-curl --fail -X POST http://localhost:5173/api/personas \
-  -H 'Content-Type: application/json' \
-  -d '{"title":"Docker test persona"}'
+# Without logging in, data routes refuse the request (proves auth is on).
+curl -i http://localhost:5173/api/personas      # 401 {"error":"Login required"}
 ```
 
 Both health requests should return `{"status":"ok"}`; whitespace may differ.
-The persona list initially includes Gloria, and the create request should return
-a new persona with an ID. On Windows PowerShell, use `curl.exe` if `curl` invokes
-a PowerShell command; enter the POST command on one line instead of using `\`.
+Every other route needs a logged-in user, so test those in the app at
+http://localhost:5173. On Windows PowerShell, use `curl.exe` if `curl` invokes a
+PowerShell command.
 
 For frontend reload verification, change visible text in a component and check
 the browser. For backend rebuild verification, change the health response in
@@ -260,11 +260,12 @@ docker compose up --build
 This deletes generated dependencies and build files, **not your source code**.
 Docker usually prefixes volume names with the Compose project name.
 
-### Does a volume preserve personas across restarts?
+### Where does the data live? Does restarting lose it?
 
-No. Personas currently live in server memory, not in either volume. Backend
-restarts reset them to the startup sample. This configuration does not include
-Supabase; that integration is separate work.
+All app data (users, personas, scenarios, classes, assignments, voice
+transcripts and conversation trees) lives in **Supabase**, not in Docker. Restarting
+containers or running `docker compose down --volumes` doesn't touch it. To set up
+or reset a database, see [docs/database-setup.md](docs/database-setup.md).
 
 ### How does a relative API URL reach the backend?
 

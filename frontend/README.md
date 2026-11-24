@@ -10,9 +10,9 @@ Currently, two official plugins are available:
 ## Supabase sign-in
 
 The login and registration pages use Supabase email/password authentication.
-Registration allows users to choose student or educator; the verified signup
-metadata is used by the backend only when it creates the user's first profile.
-Public registration cannot grant the admin role. Configure
+Every new account starts as a **student**; registration cannot choose a role.
+Educators and admins are promoted in Supabase (see
+[docs/database-setup.md](../docs/database-setup.md#5-users-and-roles)). Configure
 `VITE_SUPABASE_URL` and `VITE_SUPABASE_PUBLISHABLE_KEY` in the project-level
 `.env` file or in the frontend's environment before starting Vite. The frontend
 reads the project-level `.env`; only variables prefixed with `VITE_` are
